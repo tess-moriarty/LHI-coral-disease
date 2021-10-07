@@ -1,0 +1,78 @@
+---
+title: "photquad_LHI_disease"
+author: "Tess Moriarty"
+date: "18/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r cars}
+# Library calls
+
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(phyloseq)
+library(vegan)
+library(decontam)
+library(viridis)
+library(DataCombine)
+   
+```
+
+
+__Verify working dir and load in data__  
+```{r}
+#Check working directory, if it's not where the data is located then use setwd()
+
+getwd()
+setwd("~/Documents/Lord Howe Island/Disease")
+
+# Import data Fill=TRUE reads with missing values
+
+LHI_November2018_CPC <- read.csv("percent_covers.csv", row.names=NULL, header=TRUE, check.names=FALSE, fill=TRUE, stringsAsFactors=FALSE)
+
+# Removing columns not needed
+LHI_November2018_CPC$`Annotation area` <- NULL
+LHI_November2018_CPC$`Annotation status` <- NULL
+
+head(LHI_November2018_CPC)
+```
+
+
+
+__Simple plot of relative abundance__  
+```{r}
+# 
+
+LHI_November2018_CPC$Site <- as.factor(LHI_November2018_CPC$Site)
+LHI_November2018_CPC$Transect <- as.factor(LHI_November2018_CPC$Transect)
+LHI_November2018_CPC$Quadrat <- as.factor(LHI_November2018_CPC$Quadrat)
+LHI_November2018_CPC$Acr_arb <- as.factor(LHI_November2018_CPC$Acr_arb)
+LHI_November2018_CPC$Acr_bra <- as.factor(LHI_November2018_CPC$Acr_bra)
+LHI_November2018_CPC$Acr_dig <- as.factor(LHI_November2018_CPC$Acr_dig)
+LHI_November2018_CPC$Acr_tab <- as.factor(LHI_November2018_CPC$Acr_tab)
+
+
+Benthos <- LHI_November2018_CPC[which(LHI_November2018_CPC$Acr_arb == 'Acropora arborescent'),]
+
+
+dplyr::select(Acr_tab, Acr_dig, Acr_bra, Acr_arb, )
+
+q <- ggplot(LHI_November2018_CPC, aes(x=Site, y="Acr_arb%%Seagrass"))
+q <- q + geom_col()
+q <- q + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + labs(title = "percent cover by group all trips with bleaching")
+q
+
+
+
+
+```
+
+
+```
+

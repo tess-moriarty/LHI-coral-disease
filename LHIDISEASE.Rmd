@@ -1,0 +1,2272 @@
+---
+title: "LHI Disease"
+author: "Tess Moriarty"
+date: "15/04/2020"
+output:
+  pdf_document:
+    toc: TRUE
+  html_document:
+    theme: united
+    toc: TRUE
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+## R Markdown
+
+```{R, include = FALSE}
+# load packages
+library(tidyr)
+#install.packages("Hmisc")
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(lme4)
+library(ggplot2)
+library(car)
+library(MASS)
+library(glmmTMB)
+library(DHARMa)
+#install.packages("multcomp")
+library(multcomp)
+library(emmeans)
+library(RColorBrewer)
+library(viridis)
+library(png)
+library(ggpubr)
+dev.new(width=8, height=6, unit="in")
+plot(1:40)
+dev.new(width = 850, height = 530, unit = "px")
+plot(1:15)
+```
+
+# load disease data
+
+```{r}
+setwd("~/Documents/Lord Howe Island/Disease")
+DISEASE <- read.csv("LHIDISEASER1.csv", stringsAsFactors = FALSE, header = T, fill = TRUE)
+DISEASE$Site <- as.factor(DISEASE$Site)
+DISEASE$Month <- as.factor(DISEASE$Month)
+DISEASE$Size <- as.factor(DISEASE$Size)
+DISEASE$Health.status <- as.factor(DISEASE$Health.status)
+DISEASE$Growth.form <- as.factor(DISEASE$Growth.form)
+DISEASE$Unhealthy.status <- as.factor(DISEASE$Unhealthy.status)
+DISEASE$Unhealthy.ID <- as.factor(DISEASE$Unhealthy.ID)
+DISEASE$Species <- as.factor(DISEASE$Species)
+DISEASE$Transect <- as.factor(DISEASE$Transect)
+DISEASE$Genera <- as.factor(DISEASE$Genera)
+DISEASE$Date <- as.Date(DISEASE$Date, "%d/%m/%y")
+DISEASE$percentUH <- as.numeric(DISEASE$percentUH)
+DISEASE$Taxa <- as.factor(DISEASE$Taxa)
+DISEASE$ISLAND <- as.factor(DISEASE$ISLAND)
+str(DISEASE)
+```
+
+# grouping data
+```{r}
+
+D.disease <- DISEASE[which(DISEASE$Unhealthy.status == 'Disease'),]
+D.disease
+D.bleached<- DISEASE[which(DISEASE$Unhealthy.status == 'Bleached'),]
+D.healthy <- DISEASE[which(DISEASE$Unhealthy.status == 'Healthy'),]
+D.other<- DISEASE[which(DISEASE$Unhealthy.status == 'Other'),]
+
+```
+
+# NEW DATA FRAME FOR DISEASE
+
+# overall disease prevalence 
+
+```{r}
+# bar plots 
+
+DISEASE.counts <- ddply(DISEASE, c("Transect"), summarise, Algae = sum(Unhealthy.status == "Algae"), Bleached = sum(Unhealthy.status == "Bleached"), Disease = sum(Unhealthy.status == "Disease"),  Healthy = sum(Unhealthy.status == "Healthy"),    Other = sum(Unhealthy.status == "Other"))
+
+DISEASE.counts
+DISEASE.counts.long <- gather(DISEASE.counts, Unhealthy.status, count, Bleached:Other)
+DISEASE.counts.long$Unhealthy.status <- as.factor(DISEASE.counts.long$Unhealthy.status)
+DISEASE.counts.long
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c("Transect"), summarise, Bleached = sum(Unhealthy.status == "Bleached")/ length(Unhealthy.status)*100, Disease = sum(Unhealthy.status == "Disease")/ length(Unhealthy.status)*100,  Healthy = sum(Unhealthy.status == "Healthy")/ length(Unhealthy.status)*100, Other = sum(Unhealthy.status == "Other")/length(Unhealthy.status)*100)
+ 
+
+DISEASE.counts.long <- gather(Disease.percent, Unhealthy.status, Disease.percent, Bleached:Other)
+
+Disease.percent.sumER <- ddply(DISEASE.counts.long, c("Unhealthy.status"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sumER
+
+```
+# scatter plots
+
+```{r}
+#DISEASE.counts<- dplyr::filter(DISEASE.counts, Unhealthy.status != "Healthy")
+#DISEASE.counts<- dplyr::filter(DISEASE.counts, Unhealthy.status != "Other")
+#DISEASE.ID.counts.long<- dplyr::filter(DISEASE.ID.counts.long, Unhealthy.ID  != "")
+
+
+
+ggscatter(DISEASE.counts, x ="Disease", y = "Bleached", add = "reg.line", conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson", xlab = "Diseased coral counts", ylab = "Bleached coral counts")
+
+ggscatter(Disease.percent, x ="Disease", y = "Bleached", add = "reg.line", conf.int = TRUE, cor.coef = TRUE, cor.method = "pearson", xlab = "Diseased coral prevalence %", ylab = "Bleached coral prevalence %")
+```
+
+
+```{r}
+# bar plots 
+
+DISEASE.counts <- ddply(DISEASE, c("Month", "Transect"), summarise, Algae = sum(Unhealthy.status == "Algae"), Bleached = sum(Unhealthy.status == "Bleached"), Disease = sum(Unhealthy.status == "Disease"),  Healthy = sum(Unhealthy.status == "Healthy"),    Other = sum(Unhealthy.status == "Other"))
+
+
+DISEASE.counts.long <- gather(DISEASE.counts, Unhealthy.status, count, Bleached:Other)
+DISEASE.counts.long$Unhealthy.status <- as.factor(DISEASE.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c(  "Month", "Transect"), summarise, Bleached = sum(Unhealthy.status == "Bleached")/ length(Unhealthy.status)*100, Disease = sum(Unhealthy.status == "Disease")/ length(Unhealthy.status)*100,  Healthy = sum(Unhealthy.status == "Healthy")/ length(Unhealthy.status)*100, Other = sum(Unhealthy.status == "Other")/length(Unhealthy.status)*100)
+ 
+
+DISEASE.counts.long <- gather(Disease.percent, Unhealthy.status, Disease.percent, Bleached:Other)
+
+Disease.percent.sumER <- ddply(DISEASE.counts.long, c("Month", "Unhealthy.status"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sumER
+
+```
+
+```{r}
+
+b <- ggplot(Disease.percent.sumER, aes(x = Unhealthy.status,y = mean, fill= Unhealthy.status))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + labs(title = "Disease prevalence over time at LHI") + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(~ Month)
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+
+b
+```
+
+# all sites and time spoints combined 
+
+```{r}
+# bar plots 
+
+DISEASE.counts <- ddply(DISEASE, c("Month", "Transect"), summarise, Algae = sum(Unhealthy.status == "Algae"), Bleached = sum(Unhealthy.status == "Bleached"), Disease = sum(Unhealthy.status == "Disease"),  Healthy = sum(Unhealthy.status == "Healthy"),    Other = sum(Unhealthy.status == "Other"))
+
+
+DISEASE.counts.long <- gather(DISEASE.counts, Unhealthy.status, count, Bleached:Other)
+DISEASE.counts.long$Unhealthy.status <- as.factor(DISEASE.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c(  "Month", "Transect"), summarise, Bleached = sum(Unhealthy.status == "Bleached")/ length(Unhealthy.status)*100, Disease = sum(Unhealthy.status == "Disease")/ length(Unhealthy.status)*100,  Healthy = sum(Unhealthy.status == "Healthy")/ length(Unhealthy.status)*100, Other = sum(Unhealthy.status == "Other")/length(Unhealthy.status)*100)
+ 
+
+DISEASE.counts.long <- gather(Disease.percent, Unhealthy.status, Disease.percent, Bleached:Other)
+
+Disease.percent.sum <- ddply(DISEASE.counts.long, c("Unhealthy.status", "Month"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+```{r}
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Healthy")
+b <- ggplot(Disease.percent.sum, aes(x = Month,y = mean, fill= Unhealthy.status)) +facet_wrap(~ Unhealthy.status)
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20))  + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 0)) #+ facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+b <- b + scale_fill_manual(values=c("white", "ivory4", "pink"))+theme(legend.position = "none")
+b
+```
+
+
+
+
+# no healthy and no bleached 
+
+```{r}
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Bleached")
+b <- ggplot(Disease.percent.sum, aes(x = Unhealthy.status,y = mean, fill= Month))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + labs(title = "Only disease and other coral prevalence") + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+
+b
+```
+# only diseased 
+
+```{r}
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Algae")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Bleached")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "UV.damage")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Injured")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Other")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Unknown")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Predation")
+b <- ggplot(Disease.percent.sum, aes(x = Unhealthy.status,y = mean, fill= Month))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + labs(title = "Disease prevalence over time at LHI") + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+
+b
+```
+
+
+
+```{}
+
+Disease.percent.long <- gather(Disease.percent, Unhealthy.status, percent.abundance, Disease)
+
+#  Run the functions length, mean, and sd on the value of "zooxprot" for each Disease,
+#  broken down by Site + Time
+Disease.percent.sum <- ddply(Disease.percent.long, c("Site", "Month","Transect", "Unhealthy.status"), summarise,
+               N    = length(percent.abundance),
+               mean = mean(percent.abundance),
+               sd   = sd(percent.abundance),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+# checking the assumptions for 2 -way ANOVA 
+# looking for any outliers. No outliers present
+
+#plot1 <- ggplot(Disease.percent.sum, aes(x = Site, y = mean, fill = Time))
+#plot1 <- plot1 + geom_boxplot(position = position_dodge(), colour = "black")
+#plot1 <- plot1 + labs(title = "Bleached corals") + ylab("yield") 
+#print(plot1)
+
+
+# Checking for normality test. W = 0.94147, p-value = 0.01073 = If the P-Value of the Shapiro Wilk Test is larger than 0.05, we assume a normal distribution. If the P-Value of the Shapiro Wilk Test is smaller than 0.05, we do not assume a normal distribution.
+
+shapiro.test(Disease.percent.sum$mean)
+
+hist(Disease.percent.sum$mean, 
+     main="mean", 
+     xlab="mean", 
+     border="light blue", 
+     col="blue", 
+     las=1, 
+     breaks=20)
+
+# increasing bin size for x axis - Charlotte suggested
+
+#p1 <- ggplot(aes(x = mean), data = Disease.percent.sum) + geom_histogram()
+#p2 <- p1 + scale_x_log10()
+#p3 <- p1 + scale_x_sqrt()
+#grid.arrange(p1, p2, p3, ncol= 1)
+
+
+#normalize <- function(x) {
+#return ((x - min(x)) / (max(x) - min(x)))
+#}
+
+# skewness showed that it was positively skewed but close to zero.
+library(moments)
+skewness(Disease.percent.sum$mean, na.rm = TRUE)
+
+#Disease.percent.sum$speed_norm<-normalize(Disease.percent.sum$mean)
+#Disease.percent.sum$dist_norm<-normalize(mydata$dist)
+
+# checked all the possible transformations but they all seemed to skew. So will stay with the original.
+#Disease.percent.sum$mean <- log10(Disease.percent.sum$mean)
+#hist(Disease.percent.sum$mean, 
+#     main="log 10 positive", 
+#     xlab="mean", 
+#     border="light blue", 
+#     col="blue", 
+#     las=1, 
+#     breaks=10)
+#skewness(Disease.percent.sum$mean, na.rm = TRUE)
+#shapiro.test(Disease.percent.sum$mean)
+
+#Disease.percent.sum$mean <- 1/(Disease.percent.sum$mean)
+#hist(Disease.percent.sum$mean, 
+#     main="severely skewed to the right ", 
+#     xlab="mean", 
+#     border="light blue", 
+#     col="blue", 
+#     las=1, 
+#     breaks=10)
+#Disease.percent.sum$mean <- sqrt(Disease.percent.sum$mean)
+#hist(Disease.percent.sum$mean, 
+ #    main="sqrt", 
+#     xlab="mean", 
+#     border="light blue", 
+#     col="blue", 
+#     las=1, 
+#    breaks=15)
+#skewness(Disease.percent.sum$mean, na.rm = TRUE)
+#shapiro.test(Disease.percent.sum$mean)
+
+#Disease.percent.sum$mean <- sqrt(max(Disease.percent.sum$mean + 1)- Disease.percent.sum$mean)
+#hist(Disease.percent.sum$mean, 
+#     main="sqrt left skewed", 
+#     xlab="mean", 
+#     border="light blue", 
+#     col="blue", 
+#     las=1, 
+#     breaks=10)
+#Disease.percent.sum$mean <- log10(max(Disease.percent.sum$mean + 1) - Disease.percent.sum$mean)
+#hist(Disease.percent.sum$mean, 
+#     main="log 10 neg", 
+#     xlab="mean", 
+#     border="light blue", 
+#     col="blue", 
+#     las=1, 
+#     breaks=10)
+#skewness(Disease.percent.sum$mean, na.rm = TRUE)
+#shapiro.test(Disease.percent.sum$mean)#Disease.percent.sum$mean <- 1/(max(Disease.percent.sum$mean + 1) - Disease.percent.sum$mean)
+
+
+#hist(Disease.percent.sum$mean, 
+#     main="severely skewed to left", 
+#     xlab="mean", 
+#     border="light blue", 
+#     col="blue", 
+#     las=1, 
+#     breaks=15)
+
+
+#Disease.percent.sum$mean <- log(max(Disease.percent.sum$mean + 1) - Disease.percent.sum$mean)
+#hist(Disease.percent.sum$mean, 
+#     main="log left skewed", 
+#     xlab="mean", 
+#     border="light blue", 
+#     col="blue", 
+#     las=1, 
+#     breaks=10)
+
+
+#Disease.percent.sum$mean <- log(Disease.percent.sum$mean)
+#hist(Disease.percent.sum$mean, 
+#     main="log right skewed", 
+#     xlab="mean", 
+#     border="light blue", 
+#     col="blue", 
+#     las=1, 
+#     breaks=10)
+
+#skewness(Disease.percent.sum$mean, na.rm = TRUE)
+#shapiro.test(Disease.percent.sum$mean)
+
+
+# data is not normally distributed even after all the transformations probably due to the small sample size, therefore I will try nonparametric analysis. 
+```
+
+
+# unhealthy status per site and time 
+
+```{r}
+# bar plots 
+
+DISEASE.counts <- ddply(DISEASE, c("Site", "Month", "Transect"), summarise, Algae = sum(Unhealthy.status == "Algae"), Bleached = sum(Unhealthy.status == "Bleached"), Disease = sum(Unhealthy.status == "Disease"),  Healthy = sum(Unhealthy.status == "Healthy"),    Other = sum(Unhealthy.status == "Other"))
+
+
+DISEASE.counts.long <- gather(DISEASE.counts, Unhealthy.status, count, Bleached:Other)
+DISEASE.counts.long$Unhealthy.status <- as.factor(DISEASE.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c("Site",  "Month", "Transect"), summarise, Bleached = sum(Unhealthy.status == "Bleached")/ length(Unhealthy.status)*100, Disease = sum(Unhealthy.status == "Disease")/ length(Unhealthy.status)*100,  Healthy = sum(Unhealthy.status == "Healthy")/ length(Unhealthy.status)*100, Other = sum(Unhealthy.status == "Other")/length(Unhealthy.status)*100)
+ 
+
+DISEASE.counts.long <- gather(Disease.percent, Unhealthy.status, Disease.percent, Bleached:Other)
+
+Disease.percent.sum <- ddply(DISEASE.counts.long, c("Site", "Unhealthy.status", "Month"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+# DISEASED colonies site and time 
+```{r}
+# bar plots 
+D.disease
+
+D.counts <- ddply(DISEASE, c("Site", "Month", "Transect"), summarise, Disease = sum(Unhealthy.status == "Disease"))
+
+D.counts.long <- gather(D.counts, Unhealthy.status, count, Disease)
+D.counts.long$UNstatus <- as.factor(D.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+D.percent <- ddply(DISEASE, c("Site", "Month", "Transect"), summarise, Disease = sum(Unhealthy.status == "Disease")/length(Unhealthy.status)*100)
+
+D.percent
+
+# UNstatus percent
+
+D.percent.long <- gather(D.percent, Unhealthy.status, count, Disease)
+D.percent.long
+
+#  Run the functions length, mean, and sd on the value for each UNstatus,
+#  broken down by Site + Time
+D.percent.sum<- ddply(D.percent.long, c("Site", "Month", "Unhealthy.status"), summarise,
+               N    = length(count),
+               mean = mean(count),
+               sd   = sd(count),
+               se   = sd / sqrt(N)
+)
+D.percent.sum
+
+```
+
+
+# stats for disease over time
+
+```{r}
+# run a general linear model because none of my variables are independent 
+
+#fit1<- glmmTMB(Disease~Site*Month , family = nbinom1, data = D.percent)
+#fit1
+#Anova(fit1)
+#summary(fit1)
+#AIC(fit1)
+
+#fit2 <- glmmTMB(Disease~Site*Month , family = nbinom2, data = D.percent)
+#Anova(fit2)
+#summary(fit2)
+#AIC(fit2)
+
+#fit3 <- glmmTMB(Disease~Site*Month + (1|Transect), family = poisson, data = D.percent)
+#Anova(fit3)
+#summary(fit3)
+#AIC(fit3)
+
+fit4 <- glmmTMB(Disease~Site*Month, family = poisson, data = D.percent)
+Anova(fit4)
+summary(fit4)
+AIC(fit4)
+
+#plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit2))
+#plot(simulateResiduals(fit3))
+plot(simulateResiduals(fit4))
+
+# fit 3 - poisson is the best fit 
+```
+
+# checking for pairwise comparisons   diseased colonies
+
+# checking for pairwise comparisons   diseased colonies
+```{r}
+D.comps <- emmeans(fit4, ~Site)
+
+D.comps1 <- emmeans(fit4, ~Month)
+
+D.comps2 <- emmeans(fit4, ~Site|Month)
+
+D.comps4 <- emmeans(fit4, ~Month|Site)
+
+pairs(D.comps)
+
+pairs(D.comps1)
+
+pairs(D.comps2)
+
+pairs(D.comps4)
+```
+
+# BLEACHED colonies site and time 
+```{r}
+# bar plots 
+D.bleached
+
+B.counts <- ddply(DISEASE, c("Site", "Month", "Transect"), summarise, Bleached = sum(Unhealthy.status == "Bleached"))
+
+B.counts.long <- gather(B.counts, Unhealthy.status, count, Bleached)
+B.counts.long$UNstatus <- as.factor(B.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+B.percent <- ddply(DISEASE, c("Site", "Month", "Transect"), summarise, Bleached = sum(Unhealthy.status == "Bleached")/length(Unhealthy.status)*100)
+
+B.percent
+
+# UNstatus percent
+
+B.percent.long <- gather(B.percent, Unhealthy.status, count, Bleached)
+B.percent.long
+
+#  Run the functions length, mean, and sd on the value for each UNstatus,
+#  broken down by Site + Time
+B.percent.sum<- ddply(B.percent.long, c("Site", "Month", "Unhealthy.status"), summarise,
+               N    = length(count),
+               mean = mean(count),
+               sd   = sd(count),
+               se   = sd / sqrt(N)
+)
+B.percent.sum
+
+```
+# stats for bleached over time
+
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1<- glmmTMB(Bleached~Site*Month , family = nbinom1, data = B.percent)
+fit1
+Anova(fit1)
+summary(fit1)
+AIC(fit1)
+
+#fit2 <- glmmTMB(Bleached~Site*Month , family = nbinom2, data = B.percent)
+#Anova(fit2)
+#summary(fit2)
+#AIC(fit2)
+
+#fit3 <- glmmTMB(Bleached~Site*Month + (1|Transect), family = poisson, data = B.percent)
+#Anova(fit3)
+#summary(fit3)
+#AIC(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = B.percent)
+#Anova(fit4)
+#summary(fit4)
+#AIC(fit4)
+
+plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit2))
+#plot(simulateResiduals(fit3))
+#plot(simulateResiduals(fit4))
+
+# fit 1 - is the best fit 
+```
+
+# checking for pairwise comparisons   BLEACHED colonies
+```{r}
+B.comps <- emmeans(fit1, ~Site)
+
+B.comps1 <- emmeans(fit1, ~Month)
+
+B.comps2 <- emmeans(fit1, ~Site|Month)
+
+B.comps4 <- emmeans(fit1, ~Month|Site)
+
+pairs(B.comps)
+
+pairs(B.comps1)
+
+pairs(B.comps2)
+
+pairs(B.comps4)
+```
+# OTHER colonies site and time 
+```{r}
+# bar plots 
+D.other
+
+O.counts <- ddply(DISEASE, c("Site", "Month", "Transect"), summarise,Other = sum(Unhealthy.status == "Other"))
+
+O.counts.long <- gather(O.counts, Unhealthy.status, count, Other)
+O.counts.long$UNstatus <- as.factor(O.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+O.percent <- ddply(DISEASE, c("Site", "Month", "Transect"), summarise, Other = sum(Unhealthy.status == "Other")/length(Unhealthy.status)*100)
+
+O.percent
+
+# UNstatus percent
+
+O.percent.long <- gather(O.percent, Unhealthy.status, count, Other)
+O.percent.long
+
+#  Run the functions length, mean, and sd on the value for each UNstatus,
+#  broken down by Site + Time
+O.percent.sum<- ddply(O.percent.long, c("Site", "Month", "Unhealthy.status"), summarise,
+               N    = length(count),
+               mean = mean(count),
+               sd   = sd(count),
+               se   = sd / sqrt(N)
+)
+O.percent.sum
+
+```
+# stats for OTHER over time
+
+```{r}
+# run a general linear model because none of my variables are independent 
+
+#fit1<- glmmTMB(Other~Site*Month , family = nbinom1, data = O.percent)
+#fit1
+#Anova(fit1)
+#summary(fit1)
+#AIC(fit1)
+
+#fit2 <- glmmTMB(Other~Site*Month , family = nbinom2, data = O.percent)
+#Anova(fit2)
+#summary(fit2)
+#AIC(fit2)
+
+#fit3 <- glmmTMB(Other~Site*Month + (1|Transect), family = poisson, data = O.percent)
+#Anova(fit3)
+#summary(fit3)
+#AIC(fit3)
+
+fit4 <- glmmTMB(Other~Site*Month, family = poisson, data = O.percent)
+Anova(fit4)
+summary(fit4)
+AIC(fit4)
+
+#plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit2))
+#plot(simulateResiduals(fit3))
+plot(simulateResiduals(fit4))
+
+# fit 4 - is the best fit 
+```
+
+# checking for pairwise comparisons   OTHER colonies
+```{r}
+O.comps <- emmeans(fit1, ~Site)
+
+O.comps1 <- emmeans(fit1, ~Month)
+
+O.comps2 <- emmeans(fit1, ~Site|Month)
+
+O.comps4 <- emmeans(fit1, ~Month|Site)
+
+pairs(O.comps)
+
+pairs(O.comps1)
+
+pairs(O.comps2)
+
+pairs(O.comps4)
+```
+
+# compromised health over time and site
+```{r echo=TRUE}
+
+b <- ggplot(Disease.percent.sum, aes(x = Unhealthy.status,y = mean, fill= Month))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + labs(title = "Coral health prevalence") + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+
+b
+```
+
+# compromised health over time and site no healthy
+```{r, fig.width = 6}
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Healthy")
+b <- ggplot(Disease.percent.sum, aes(x = Month,y = mean, fill= Unhealthy.status))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20))+ ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=15, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=15, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=15)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 0)) + facet_wrap(Unhealthy.status ~ Site)
+b <- b + theme(strip.text.x = element_text(size = 15, face = "bold")) # text size of facet label titles
+b <- b + scale_fill_manual(values=c("white", "ivory4", "pink"))+theme(legend.position = "none") + theme(
+  strip.background = element_blank(),
+  strip.text.x = element_blank()
+) # remove facet_wrap titles
+b
+```
+
+
+
+# only diseased 
+
+```{r}
+
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Algae")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Bleached")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "UV.damage")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Injured")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Other")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Unknown")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Predation")
+b <- ggplot(Disease.percent.sum, aes(x = Unhealthy.status,y = mean, fill= Month))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + labs(title = "Disease prevalence over time and site") + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+
+b
+```
+```{r}
+# bar plots 
+
+DISEASE.counts <- ddply(DISEASE, c("Site", "Month","Size", "Transect"), summarise, Algae = sum(Unhealthy.status == "Algae"), Bleached = sum(Unhealthy.status == "Bleached"), Disease = sum(Unhealthy.status == "Disease"),  Healthy = sum(Unhealthy.status == "Healthy"),    Other = sum(Unhealthy.status == "Other"))
+
+
+DISEASE.counts.long <- gather(DISEASE.counts, Unhealthy.status, count, Bleached:Other)
+DISEASE.counts.long$Unhealthy.status <- as.factor(DISEASE.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c("Site",  "Month","Size", "Transect"), summarise, Bleached = sum(Unhealthy.status == "Bleached")/ length(Unhealthy.status)*100, Disease = sum(Unhealthy.status == "Disease")/ length(Unhealthy.status)*100,  Healthy = sum(Unhealthy.status == "Healthy")/ length(Unhealthy.status)*100, Other = sum(Unhealthy.status == "Other")/length(Unhealthy.status)*100)
+ 
+
+DISEASE.counts.long <- gather(Disease.percent, Unhealthy.status, Disease.percent, Bleached:Other)
+
+Disease.percent.sum <- ddply(DISEASE.counts.long, c("Site","Size", "Unhealthy.status", "Month"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+# disease ID
+```{r}
+# bar plots 
+
+DISEASE.ID.counts <- ddply(DISEASE, c("Site", "Month", "Transect"), summarise, Bleached =sum(Unhealthy.ID == "Bleached"), Competition =sum(Unhealthy.ID == "Competition"), Dead = sum(Unhealthy.ID == "Dead"),White.syndrome =sum(Unhealthy.ID == "White syndrome"), Drupella =sum(Unhealthy.ID == "Drupella"), Fluoresence =sum(Unhealthy.ID == "Fluoresence"), Growth.anomaly =sum(Unhealthy.ID == "Growth anomaly"), Healthy = sum(Unhealthy.ID == "Healthy"), Injured =sum(Unhealthy.ID == "Injured"), Pale =sum(Unhealthy.ID == "Pale"),SEB = sum(Unhealthy.ID == "SEB"), Partially.Dead = sum(Unhealthy.ID == "Partially Dead"), Predation = sum(Unhealthy.ID == "Predation"))
+                           
+                           
+DISEASE.ID.counts.long <- gather(DISEASE.ID.counts, Unhealthy.ID, count,Bleached:Predation)
+DISEASE.ID.counts.long$Unhealthy.ID <- as.factor(DISEASE.ID.counts.long$Unhealthy.ID)
+DISEASE.ID.counts.long
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c("Site",  "Month", "Transect"), summarise, Bleached = sum(Unhealthy.ID == "Bleached")/ length(Unhealthy.ID)*100, Competition = sum(Unhealthy.ID == "Competition")/ length(Unhealthy.ID)*100, Dead = sum(Unhealthy.ID == "Dead")/ length(Unhealthy.ID)*100,White.syndrome =sum(Unhealthy.ID == "White syndrome")/length(Unhealthy.ID)*100, Drupella = sum(Unhealthy.ID == "Drupella")/ length(Unhealthy.ID)*100, Fluoresence = sum(Unhealthy.ID == "Fluoresence")/ length(Unhealthy.ID)*100, Growth.anomaly = sum(Unhealthy.ID == "Growth anomaly")/ length(Unhealthy.ID)*100, Healthy = sum(Unhealthy.ID == "Healthy")/ length(Unhealthy.ID)*100,  Injured = sum(Unhealthy.ID == "Injured")/ length(Unhealthy.ID)*100,  Pale = sum(Unhealthy.ID == "Pale")/ length(Unhealthy.ID)*100,SEB = sum(Unhealthy.ID == "SEB")/ length(Unhealthy.ID)*100, Partially.Dead = sum(Unhealthy.ID == "Partially Dead")/ length(Unhealthy.ID)*100,  Predation = sum(Unhealthy.ID == "Predation")/ length(Unhealthy.ID)*100)
+ 
+
+DISEASE.ID.counts.long <- gather(Disease.percent, Unhealthy.ID, Disease.percent, Bleached:Predation)
+
+Disease.percent.sum <- ddply(DISEASE.ID.counts.long, c(  "Unhealthy.ID"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+# unhealthy coral ID
+```{r}
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Healthy")
+b <- ggplot(Disease.percent.sum, aes(x = Unhealthy.ID,y = mean, fill= Unhealthy.ID))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90)) 
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+b <- b + scale_fill_viridis(discrete = TRUE, option = "B") # COSE OPTIONS BETWEEN a-d FOR DIFF COLOURS
+#b <- b + barplot(1:12, col = magma(7))
+#+ scale_fill_manual(values=c("#FF9933", "#CC0066", "#330066", "purple", "pink", "orange", "blue", "yellow", "lightblue", "red", "green", "grey"))+theme(legend.position = "none")
+b
+```
+
+```{r}
+# bar plots 
+
+DISEASE.ID.counts <- ddply(DISEASE, c("Site", "Month", "Transect"), summarise, Bleached =sum(Unhealthy.ID == "Bleached"), Competition =sum(Unhealthy.ID == "Competition"), Dead = sum(Unhealthy.ID == "Dead"), Drupella =sum(Unhealthy.ID == "Drupella"), Fluoresence =sum(Unhealthy.ID == "Fluoresence"), Growth.anomaly =sum(Unhealthy.ID == "Growth anomaly"), Healthy = sum(Unhealthy.ID == "Healthy"), Injured =sum(Unhealthy.ID == "Injured"), Pale =sum(Unhealthy.ID == "Pale"), SEB = sum(Unhealthy.ID == "SEB"),Partially.Dead = sum(Unhealthy.ID == "Partially Dead"), Predation = sum(Unhealthy.ID == "Predation"),White.syndrome = sum(Unhealthy.ID == "White syndrome"))
+                           
+                           
+DISEASE.ID.counts.long <- gather(DISEASE.ID.counts, Unhealthy.ID, count,Bleached:White.syndrome)
+DISEASE.ID.counts.long$Unhealthy.ID <- as.factor(DISEASE.ID.counts.long$Unhealthy.ID)
+DISEASE.ID.counts.long
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c("Site",  "Month", "Transect"), summarise, Bleached = sum(Unhealthy.ID == "Bleached")/ length(Unhealthy.ID)*100, Competition = sum(Unhealthy.ID == "Competition")/ length(Unhealthy.ID)*100, Dead = sum(Unhealthy.ID == "Dead")/ length(Unhealthy.ID)*100, Drupella = sum(Unhealthy.ID == "Drupella")/ length(Unhealthy.ID)*100, Fluoresence = sum(Unhealthy.ID == "Fluoresence")/ length(Unhealthy.ID)*100, Growth.anomaly = sum(Unhealthy.ID == "Growth anomaly")/ length(Unhealthy.ID)*100, Healthy = sum(Unhealthy.ID == "Healthy")/ length(Unhealthy.ID)*100,  Injured = sum(Unhealthy.ID == "Injured")/ length(Unhealthy.ID)*100,  Pale = sum(Unhealthy.ID == "Pale")/ length(Unhealthy.ID)*100,SEB = sum(Unhealthy.ID == "SEB")/ length(Unhealthy.ID)*100, Partially.Dead = sum(Unhealthy.ID == "Partially Dead")/ length(Unhealthy.ID)*100,  Predation = sum(Unhealthy.ID == "Predation")/ length(Unhealthy.ID)*100,White.syndrome = sum(Unhealthy.ID == "White syndrome")/ length(Unhealthy.ID)*100)
+ 
+
+DISEASE.ID.counts.long <- gather(Disease.percent, Unhealthy.ID, Disease.percent, Bleached:White.syndrome)
+
+Disease.percent.sum <- ddply(DISEASE.ID.counts.long, c("Site","Month",  "Unhealthy.ID"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+# unhealthy coral ID
+```{r}
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Healthy")
+b <- ggplot(Disease.percent.sum, aes(x = Unhealthy.ID,y = mean, fill= Month))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+b <- b + scale_fill_manual(values=c("#FF9933", "#CC0066", "#330066"))+theme(legend.position = "none")
+b
+```
+
+# remove all bleached and bleaching levels
+
+```{r}
+
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Bleached")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Pale")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Fluoresence")
+b <- ggplot(Disease.percent.sum, aes(x = Unhealthy.ID,y = mean, fill= Month))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + labs(title = "Known health conditions - bleached coral removed") + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+
+b
+```
+
+```{r}
+
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Bleached")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Pale")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Fluoresence")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Dead")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Partially Dead")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Competition")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Partially.Dead")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Drupella")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Injured")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Predation")
+
+b <- ggplot(Disease.percent.sum, aes(x = Unhealthy.ID,y = mean, fill= Month))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 0)) + facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+b <- b + scale_fill_manual(values=c("thistle3", "tan", "slategray3"))+theme(legend.position = "none") 
+
+b
+```
+
+# stats for WHITE SYNDROME over time and site
+
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1<- glmmTMB(White.syndrome~Site*Month , family = nbinom1, data = Disease.percent)
+fit1
+Anova(fit1)
+summary(fit1)
+AIC(fit1)
+
+#fit2 <- glmmTMB(White.syndrome~Site*Month , family = nbinom2, data = Disease.percent)
+#Anova(fit2)
+#summary(fit2)
+#AIC(fit2)
+
+#fit3 <- glmmTMB(White.syndrome~Site*Month + (1|Transect), family = poisson, data = Disease.percent)
+#Anova(fit3)
+#summary(fit3)
+#AIC(fit3)
+
+#fit4 <- glmmTMB(White.syndrome~Site*Month, family = poisson, data = Disease.percent)
+#Anova(fit4)
+#summary(fit4)
+#AIC(fit4)
+
+plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit2))
+#plot(simulateResiduals(fit3))
+#plot(simulateResiduals(fit4))
+
+# fit 3 - poisson is the best fit 
+```
+
+# checking for pairwise comparisons   DISEASE ID colonies
+```{r}
+WS.comps <- emmeans(fit1, ~Site)
+
+WS.comps1 <- emmeans(fit1, ~Month)
+
+WS.comps2 <- emmeans(fit1, ~Site|Month)
+
+WS.comps4 <- emmeans(fit1, ~Month|Site)
+
+pairs(WS.comps)
+
+pairs(WS.comps1)
+
+pairs(WS.comps2)
+
+pairs(WS.comps4)
+```
+# stats for SEB over time and site
+
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1<- glmmTMB(SEB~Site*Month , family = nbinom1, data = Disease.percent)
+fit1
+Anova(fit1)
+summary(fit1)
+AIC(fit1)
+
+fit2 <- glmmTMB(SEB~Site*Month , family = nbinom2, data = Disease.percent)
+Anova(fit2)
+summary(fit2)
+AIC(fit2)
+
+fit3 <- glmmTMB(SEB~Site*Month + (1|Transect), family = poisson, data = Disease.percent)
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+fit4 <- glmmTMB(SEB~Site*Month, family = poisson, data = Disease.percent)
+Anova(fit4)
+summary(fit4)
+AIC(fit4)
+
+plot(simulateResiduals(fit1))
+plot(simulateResiduals(fit2))
+plot(simulateResiduals(fit3))
+plot(simulateResiduals(fit4))
+
+# fit 3 - poisson is the best fit 
+```
+
+# checking for pairwise comparisons   DISEASE ID colonies
+```{r}
+SEB.comps <- emmeans(fit1, ~Site)
+
+SEB.comps1 <- emmeans(fit1, ~Month)
+
+SEB.comps2 <- emmeans(fit1, ~Site|Month)
+
+SEB.comps4 <- emmeans(fit1, ~Month|Site)
+
+pairs(SEB.comps)
+
+pairs(SEB.comps1)
+
+pairs(SEB.comps2)
+
+pairs(WS.comps4)
+```
+
+
+
+
+
+# disease ID WITH LHI ISLAND
+```{r}
+# bar plots 
+
+DISEASE.ID.counts <- ddply(DISEASE, c("ISLAND", "Transect", "Site"), summarise, Bleached =sum(Unhealthy.ID == "Bleached"), Competition =sum(Unhealthy.ID == "Competition"), Dead = sum(Unhealthy.ID == "Dead"),White.syndrome =sum(Unhealthy.ID == "White syndrome"), Drupella =sum(Unhealthy.ID == "Drupella"), Fluoresence =sum(Unhealthy.ID == "Fluoresence"), Growth.anomaly =sum(Unhealthy.ID == "Growth anomaly"), Healthy = sum(Unhealthy.ID == "Healthy"), Injured =sum(Unhealthy.ID == "Injured"), Pale =sum(Unhealthy.ID == "Pale"),SEB = sum(Unhealthy.ID == "SEB"), Partially.Dead = sum(Unhealthy.ID == "Partially Dead"), Predation = sum(Unhealthy.ID == "Predation"))
+                           
+                           
+DISEASE.ID.counts.long <- gather(DISEASE.ID.counts, Unhealthy.ID, count,Bleached:Predation)
+DISEASE.ID.counts.long$Unhealthy.ID <- as.factor(DISEASE.ID.counts.long$Unhealthy.ID)
+DISEASE.ID.counts.long
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c("ISLAND", "Transect", "Site"), summarise, Bleached = sum(Unhealthy.ID == "Bleached")/ length(Unhealthy.ID)*100, Competition = sum(Unhealthy.ID == "Competition")/ length(Unhealthy.ID)*100, Dead = sum(Unhealthy.ID == "Dead")/ length(Unhealthy.ID)*100,White.syndrome =sum(Unhealthy.ID == "White syndrome")/length(Unhealthy.ID)*100, Drupella = sum(Unhealthy.ID == "Drupella")/ length(Unhealthy.ID)*100, Fluoresence = sum(Unhealthy.ID == "Fluoresence")/ length(Unhealthy.ID)*100, Growth.anomaly = sum(Unhealthy.ID == "Growth anomaly")/ length(Unhealthy.ID)*100, Healthy = sum(Unhealthy.ID == "Healthy")/ length(Unhealthy.ID)*100,  Injured = sum(Unhealthy.ID == "Injured")/ length(Unhealthy.ID)*100,  Pale = sum(Unhealthy.ID == "Pale")/ length(Unhealthy.ID)*100,SEB = sum(Unhealthy.ID == "SEB")/ length(Unhealthy.ID)*100, Partially.Dead = sum(Unhealthy.ID == "Partially Dead")/ length(Unhealthy.ID)*100,  Predation = sum(Unhealthy.ID == "Predation")/ length(Unhealthy.ID)*100)
+ 
+
+DISEASE.ID.counts.long <- gather(Disease.percent, Unhealthy.ID, Disease.percent, Bleached:Predation)
+
+Disease.percent.sum <- ddply(DISEASE.ID.counts.long, c(  "Unhealthy.ID", "ISLAND", "Site"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+
+# stats for UNHEALTHY IF AT LHI
+
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1<- glmmTMB(LHI ~Unhealthy.ID , family = nbinom1, data = Disease.percent)
+fit1
+Anova(fit1)
+summary(fit1)
+AIC(fit1)
+
+fit2 <- glmmTMB(SEB~Unhealthy.ID*Month , family = nbinom2, data = Disease.percent)
+Anova(fit2)
+summary(fit2)
+AIC(fit2)
+
+fit3 <- glmmTMB(SEB~Unhealthy.ID*Month + (1|Transect), family = poisson, data = Disease.percent)
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+fit4 <- glmmTMB(SEB~Unhealthy.ID*Month, family = poisson, data = Disease.percent)
+Anova(fit4)
+summary(fit4)
+AIC(fit4)
+
+plot(simulateResiduals(fit1))
+plot(simulateResiduals(fit2))
+plot(simulateResiduals(fit3))
+plot(simulateResiduals(fit4))
+
+# fit 3 - poisson is the best fit 
+```
+
+# species and coral disease
+
+```{r}
+# bar plots 
+
+DISEASE.counts <- ddply(DISEASE, c( "Month", "Transect", "Genera"), summarise, Algae = sum(Unhealthy.status == "Algae"), Bleached = sum(Unhealthy.status == "Bleached"), Disease = sum(Unhealthy.status == "Disease"),  Healthy = sum(Unhealthy.status == "Healthy"),    Other = sum(Unhealthy.status == "Other"))
+
+
+DISEASE.counts.long <- gather(DISEASE.counts, Unhealthy.status, count, Bleached:Other)
+DISEASE.counts.long$Unhealthy.status <- as.factor(DISEASE.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c(  "Month", "Transect", "Genera"), summarise, Bleached = sum(Unhealthy.status == "Bleached")/ length(Unhealthy.status)*100, Disease = sum(Unhealthy.status == "Disease")/ length(Unhealthy.status)*100,  Healthy = sum(Unhealthy.status == "Healthy")/ length(Unhealthy.status)*100, Other = sum(Unhealthy.status == "Other")/length(Unhealthy.status)*100)
+ 
+
+DISEASE.counts.long <- gather(Disease.percent, Unhealthy.status, Disease.percent, Bleached:Other)
+
+Disease.percent.sum <- ddply(DISEASE.counts.long, c( "Unhealthy.status", "Month", "Genera"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+# coral taxa and disease and time
+```{r}
+#all sites
+
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Algae")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Bleached")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "UV.damage")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Injured")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Other")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Unknown")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Predation")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Favia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Favites")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Cyphastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Echinopora")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Pavona")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Mussidae")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Montastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Goniastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Astrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Paragoniastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Goniopora")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Homophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Acanthastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Echinophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Lobophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Stylophora")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Platygyra")
+#Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Montipora")
+
+Disease.percent.sum
+
+b <- ggplot(Disease.percent.sum, aes(x = Genera,y = mean, fill= Month))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+b <- b + scale_fill_manual(values=c("ivory4","ivory4","ivory4"))+theme(legend.position = "none") 
+b
+
+```
+
+
+```{r}
+# bar plots 
+
+DISEASE.counts <- ddply(DISEASE, c( "Month", "Transect", "Genera", "Site"), summarise, Algae = sum(Unhealthy.status == "Algae"), Bleached = sum(Unhealthy.status == "Bleached"), Disease = sum(Unhealthy.status == "Disease"),  Healthy = sum(Unhealthy.status == "Healthy"),    Other = sum(Unhealthy.status == "Other"))
+
+
+DISEASE.counts.long <- gather(DISEASE.counts, Unhealthy.status, count, Bleached:Other)
+DISEASE.counts.long$Unhealthy.status <- as.factor(DISEASE.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c(  "Month", "Transect", "Genera", "Site"), summarise, Bleached = sum(Unhealthy.status == "Bleached")/ length(Unhealthy.status)*100, Disease = sum(Unhealthy.status == "Disease")/ length(Unhealthy.status)*100,  Healthy = sum(Unhealthy.status == "Healthy")/ length(Unhealthy.status)*100, Other = sum(Unhealthy.status == "Other")/length(Unhealthy.status)*100)
+ 
+
+DISEASE.counts.long <- gather(Disease.percent, Unhealthy.status, Disease.percent, Bleached:Other)
+
+Disease.percent.sum <- ddply(DISEASE.counts.long, c( "Unhealthy.status", "Month", "Genera", "Site"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+
+
+```{r}
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Algae")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Bleached")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "UV.damage")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Injured")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Other")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Unknown")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Predation")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Favia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Favites")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Cyphastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Echinophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Pavona")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Mussidae")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Montastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Goniastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Astrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Paragoniastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Goniopora")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Homophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Acanthastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Lobophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Stylophora")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Platygyra")
+b <- ggplot(Disease.percent.sum, aes(x = Genera,y = mean, fill= Month))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + labs(title = "Disease prevalence per taxa over time at LHI") + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+
+b <- b + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 15, face = "bold")) # text size of facet label titles
+b <- b + scale_fill_manual(values=c("#FF9933", "#CC0066", "#330066"))+theme(legend.position = "none") 
+b
+```
+
+
+# coral disease time and site per taxa
+```{r}
+# bar plots 
+
+DISEASE.counts <- ddply(DISEASE, c("Site", "Month", "Transect", "Genera"), summarise, Algae = sum(Unhealthy.status == "Algae"), Bleached = sum(Unhealthy.status == "Bleached"), Disease = sum(Unhealthy.status == "Disease"),  Healthy = sum(Unhealthy.status == "Healthy"),    Other = sum(Unhealthy.status == "Other"))
+
+
+DISEASE.counts.long <- gather(DISEASE.counts, Unhealthy.status, count, Bleached:Other)
+DISEASE.counts.long$Unhealthy.status <- as.factor(DISEASE.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c("Site",  "Month", "Transect", "Genera"), summarise, Bleached = sum(Unhealthy.status == "Bleached")/ length(Unhealthy.status)*100, Disease = sum(Unhealthy.status == "Disease")/ length(Unhealthy.status)*100,  Healthy = sum(Unhealthy.status == "Healthy")/ length(Unhealthy.status)*100, Other = sum(Unhealthy.status == "Other")/length(Unhealthy.status)*100)
+ 
+
+DISEASE.counts.long <- gather(Disease.percent, Unhealthy.status, Disease.percent, Bleached:Other)
+
+Disease.percent.sum <- ddply(DISEASE.counts.long, c("Site", "Unhealthy.status", "Month", "Genera"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+```{r}
+#each site
+
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Algae")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Bleached")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "UV.damage")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Injured")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Other")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Unknown")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Predation")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Favia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Favites")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Cyphastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Echinophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Pavona")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Mussidae")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Montastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Goniastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Astrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Paragoniastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Goniopora")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Homophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Acanthastrea")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Lobophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Stylophora")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Platygyra")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "")
+
+
+
+b <- ggplot(Disease.percent.sum, aes(x = Genera,y = mean, fill= Month))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + labs(title = "Disease prevalence per taxa over time at all 3 sites") + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+
+b
+coral.taxa.disease <- Disease.percent.sum
+coral.taxa.disease
+```
+```{}
+DISEASE.counts.long
+
+rlang::last_error()
+#DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Unhealthy.status != "Algae")
+#DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Unhealthy.status != "Bleached")
+#DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Unhealthy.status != "UV.damage")
+#DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Unhealthy.status != "Injured")
+#DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Unhealthy.status != "Other")
+#DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Unhealthy.status != "Unknown")
+#DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Unhealthy.status != "Predation")
+#DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Unhealthy.status != "Healthy")
+
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "Goniastrea")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != ")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "?")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "Lobophyllia")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != ")
+DISEASE.counts.long <- dplyr::filter(DISEASE.counts.long, Genera != "")
+DISEASE.counts.long
+```
+```{}
+#DD <- DISEASE[which(DISEASE$Unhealthy.status == 'Disease'),]
+#DD
+
+DISEASE.counts <- ddply(DISEASE, c("Site", "Month", "Transect", "Unhealthy.status"), summarise, Acanthastrea =sum(Genera == "Acanthastrea"), Acropora = sum(Genera == "Acropora"), Astrea = sum(Genera == "Astrea"), Cyphastrea = sum(Genera == "Cyphastrea"), Echinopora = sum(Genera == "Echinopora "), Favia = sum(Genera == "Favia"), Favites = sum(Genera == "Favites"), Goniopora = sum(Genera == "Goniopora"), Homophyllia = sum(Genera == "Homophyllia"), Isopora = sum(Genera == "Isopora"), Montipora = sum(Genera == "Montipora"), Paragoniastrea = sum(Genera == "Paragoniastrea"), Pavona = sum(Genera == "Pavona"), Platygyra = sum(Genera == "Platygyra"), Pocillopora = sum(Genera == "Pocillopora"), Porites = sum(Genera == "Porites"), Seriatopora = sum(Genera == "Seriatopora"), Stylophora = sum(Genera == "Stylophora"), Turbinaria = sum(Genera == "Turbinaria"), Mussidae = sum(Genera == "Mussidae"), Montastrea = sum(Genera == "Montastrea"))
+
+DISEASE.counts
+
+DISEASE.counts.long <- gather(DISEASE.counts, Genera, count,Unhealthy.status, Acanthastrea:Montastrea)
+DISEASE.counts.long$Genera <- as.factor(DISEASE.counts.long$Genera)
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c("Site",  "Month", "Transect", "Unhealthy.status"), summarise, Acanthastrea =sum(Genera == "Acanthastrea")/ length(Genera)*100, Acropora = sum(Genera == "Acropora")/ length(Genera)*100, Astrea = sum(Genera == "Astrea")/ length(Genera)*100, Cyphastrea = sum(Genera == "Cyphastrea")/ length(Genera)*100, Echinopora = sum(Genera == "Echinopora ")/ length(Genera)*100, Favia = sum(Genera == "Favia")/ length(Genera)*100, Favites = sum(Genera == "Favites")/ length(Genera)*100, Goniopora = sum(Genera == "Goniopora")/ length(Genera)*100, Homophyllia = sum(Genera == "Homophyllia")/ length(Genera)*100, Isopora = sum(Genera == "Isopora")/ length(Genera)*100, Montipora = sum(Genera == "Montipora")/ length(Genera)*100, Paragoniastrea = sum(Genera == "Paragoniastrea")/ length(Genera)*100, Pavona = sum(Genera == "Pavona")/ length(Genera)*100, Platygyra = sum(Genera == "Platygyra")/ length(Genera)*100, Pocillopora = sum(Genera == "Pocillopora")/ length(Genera)*100, Porites = sum(Genera == "Porites")/ length(Genera)*100, Seriatopora = sum(Genera == "Seriatopora")/ length(Genera)*100, Stylophora = sum(Genera == "Stylophora")/ length(Genera)*100, Turbinaria = sum(Genera == "Turbinaria")/ length(Genera)*100, Mussidae = sum(Genera == "Mussidae"), Montastrea = sum(Genera == "Montastrea")/ length(Genera)*100)
+ 
+Disease.percent
+
+DISEASE.percent.long <- gather(Disease.percent, Genera, DISEASE.counts,Unhealthy.status,  Acanthastrea:Montastrea)
+#DISEASE.counts.long
+
+#acro.percent.long <- gather(acro.percent, UNstatus, acro.counts, Healthy, Bleached, Other, Dead)
+
+Disease.percent.sum <- ddply(DISEASE.percent.long, c("Site",  "Month", "Unhealthy.status"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+
+```{r}
+# bar plots 
+dd.stacked <- DISEASE
+
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Favia")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Favites")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Cyphastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Echinopora")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Pavona")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Mussidae")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Montastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Goniastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Astrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Paragoniastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Goniopora")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Homophyllia")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Acanthastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Lobophyllia")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Stylophora")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Platygyra")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Echinophyllia")
+
+
+DISEASE.ID.counts <- ddply(dd.stacked, c("Site", "Month", "Transect", "Genera"), summarise, Bleached =sum(Unhealthy.ID == "Bleached"), Competition =sum(Unhealthy.ID == "Competition"), Dead = sum(Unhealthy.ID == "Dead"),White.syndrome =sum(Unhealthy.ID == "White syndrome"), Drupella =sum(Unhealthy.ID == "Drupella"), Fluoresence =sum(Unhealthy.ID == "Fluoresence"), Growth.anomaly =sum(Unhealthy.ID == "Growth anomaly"), Healthy = sum(Unhealthy.ID == "Healthy"), Injured =sum(Unhealthy.ID == "Injured"), Pale =sum(Unhealthy.ID == "Pale"),SEB = sum(Unhealthy.ID == "SEB"), Partially.Dead = sum(Unhealthy.ID == "Partially Dead"), Predation = sum(Unhealthy.ID == "Predation"))
+                           
+                           
+DISEASE.ID.counts.long <- gather(DISEASE.ID.counts, Unhealthy.ID, count,Bleached:Predation)
+DISEASE.ID.counts.long$Unhealthy.ID <- as.factor(DISEASE.ID.counts.long$Unhealthy.ID)
+DISEASE.ID.counts.long
+
+# use ddply to get %
+
+Disease.percent <- ddply(dd.stacked, c("Site",  "Month", "Transect", "Genera"), summarise, Bleached = sum(Unhealthy.ID == "Bleached")/ length(Unhealthy.ID)*100, Competition = sum(Unhealthy.ID == "Competition")/ length(Unhealthy.ID)*100, Dead = sum(Unhealthy.ID == "Dead")/ length(Unhealthy.ID)*100,White.syndrome =sum(Unhealthy.ID == "White syndrome")/length(Unhealthy.ID)*100, Drupella = sum(Unhealthy.ID == "Drupella")/ length(Unhealthy.ID)*100, Fluoresence = sum(Unhealthy.ID == "Fluoresence")/ length(Unhealthy.ID)*100, Growth.anomaly = sum(Unhealthy.ID == "Growth anomaly")/ length(Unhealthy.ID)*100, Healthy = sum(Unhealthy.ID == "Healthy")/ length(Unhealthy.ID)*100,  Injured = sum(Unhealthy.ID == "Injured")/ length(Unhealthy.ID)*100,  Pale = sum(Unhealthy.ID == "Pale")/ length(Unhealthy.ID)*100,SEB = sum(Unhealthy.ID == "SEB")/ length(Unhealthy.ID)*100, Partially.Dead = sum(Unhealthy.ID == "Partially Dead")/ length(Unhealthy.ID)*100,  Predation = sum(Unhealthy.ID == "Predation")/ length(Unhealthy.ID)*100)
+ 
+
+DISEASE.ID.counts.long <- gather(Disease.percent, Unhealthy.ID, Disease.percent, Bleached:Predation)
+
+Disease.percent.sum <- ddply(DISEASE.ID.counts.long, c(  "Unhealthy.ID", "Genera"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+```{r}
+
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Competition")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Bleached")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Dead")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Injured")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Drupella")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Fluoresence")
+Disease.percent.sum<- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Predation")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Partially.Dead")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Echinophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Pale")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "E ")
+
+  taxaDISEASE <- ggplot(Disease.percent.sum, aes(fill=Unhealthy.ID, y=mean, x=Genera))  + 
+    geom_bar(position="stack", stat="identity")+  theme(legend.title = element_blank())   + scale_fill_discrete(labels = c("Abiotic", "Algae", "Dead coral", "Other invertebrates", "Seagrass", "Soft coral", "Stony coral"))  +  scale_fill_discrete(name = "Coral taxa", labels = c(~ italic("Acropora spp."), ~italic ("Isopora cuneata"), "Other taxa", ~italic("Pocillopora damicornis"), ~italic("Porites spp."), ~ italic("Seriatopora hystrix"),~italic("Stylophora pistillata")))   + labs(x = "Taxa", y = "Coral disease prevalence %")  + # axis title size +
+theme(panel.background = element_blank()) + # re label legend axis
+scale_fill_manual(values=c("thistle3", "tan", "slategray3"))+theme(legend.position = "none") + theme(
+  strip.background = element_blank(),
+  strip.text.x = element_blank()
+)+ # remove facet_wrap titles
+theme(plot.title = element_text(size = 10)) + # main title 
+theme(axis.text.x = element_text(angle = 45, size = 10)) + theme(legend.text=element_text(size=10)) + theme(axis.text.y = element_text(size = 10), axis.title.x = element_text(size = 10, vjust = -0.8), axis.title.y = element_text(size = 10, vjust = 1))  
+taxaDISEASE
+```
+
+```{r}
+# bar plots 
+dd.stacked <- DISEASE
+
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Favia")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Favites")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Cyphastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Echinopora")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Pavona")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Mussidae")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Montastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Goniastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Astrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Paragoniastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Goniopora")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Homophyllia")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Acanthastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Lobophyllia")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Stylophora")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Platygyra")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Echinophyllia")
+
+
+DISEASE.ID.counts <- ddply(dd.stacked, c("Site", "Month", "Transect", "Genera"), summarise, Bleached =sum(Unhealthy.ID == "Bleached"), Competition =sum(Unhealthy.ID == "Competition"), Dead = sum(Unhealthy.ID == "Dead"),White.syndrome =sum(Unhealthy.ID == "White syndrome"), Drupella =sum(Unhealthy.ID == "Drupella"), Fluoresence =sum(Unhealthy.ID == "Fluoresence"), Growth.anomaly =sum(Unhealthy.ID == "Growth anomaly"), Healthy = sum(Unhealthy.ID == "Healthy"), Injured =sum(Unhealthy.ID == "Injured"), Pale =sum(Unhealthy.ID == "Pale"),SEB = sum(Unhealthy.ID == "SEB"), Partially.Dead = sum(Unhealthy.ID == "Partially Dead"), Predation = sum(Unhealthy.ID == "Predation"))
+                           
+                           
+DISEASE.ID.counts.long <- gather(DISEASE.ID.counts, Unhealthy.ID, count,Bleached:Predation)
+DISEASE.ID.counts.long$Unhealthy.ID <- as.factor(DISEASE.ID.counts.long$Unhealthy.ID)
+DISEASE.ID.counts.long
+
+# use ddply to get %
+
+Disease.percent <- ddply(dd.stacked, c("Site",  "Month", "Transect", "Genera"), summarise, Bleached = sum(Unhealthy.ID == "Bleached")/ length(Unhealthy.ID)*100, Competition = sum(Unhealthy.ID == "Competition")/ length(Unhealthy.ID)*100, Dead = sum(Unhealthy.ID == "Dead")/ length(Unhealthy.ID)*100,White.syndrome =sum(Unhealthy.ID == "White syndrome")/length(Unhealthy.ID)*100, Drupella = sum(Unhealthy.ID == "Drupella")/ length(Unhealthy.ID)*100, Fluoresence = sum(Unhealthy.ID == "Fluoresence")/ length(Unhealthy.ID)*100, Growth.anomaly = sum(Unhealthy.ID == "Growth anomaly")/ length(Unhealthy.ID)*100, Healthy = sum(Unhealthy.ID == "Healthy")/ length(Unhealthy.ID)*100,  Injured = sum(Unhealthy.ID == "Injured")/ length(Unhealthy.ID)*100,  Pale = sum(Unhealthy.ID == "Pale")/ length(Unhealthy.ID)*100,SEB = sum(Unhealthy.ID == "SEB")/ length(Unhealthy.ID)*100, Partially.Dead = sum(Unhealthy.ID == "Partially Dead")/ length(Unhealthy.ID)*100,  Predation = sum(Unhealthy.ID == "Predation")/ length(Unhealthy.ID)*100)
+ 
+
+DISEASE.ID.counts.long <- gather(Disease.percent, Unhealthy.ID, Disease.percent, Bleached:Predation)
+
+Disease.percent.sum <- ddply(DISEASE.ID.counts.long, c("Site",  "Unhealthy.ID", "Genera"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+```{r}
+
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Competition")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Bleached")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Dead")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Injured")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Drupella")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Fluoresence")
+Disease.percent.sum<- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Predation")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Partially.Dead")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Echinophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Pale")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "E ")
+
+  taxaDISEASE <- ggplot(Disease.percent.sum, aes(fill=Unhealthy.ID, y=mean, x=Genera))  + 
+    geom_bar(position="stack", stat="identity")+  theme(legend.title = element_blank())   + scale_fill_discrete(labels = c("Abiotic", "Algae", "Dead coral", "Other invertebrates", "Seagrass", "Soft coral", "Stony coral"))  +  scale_fill_discrete(name = "Coral taxa", labels = c(~ italic("Acropora spp."), ~italic ("Isopora cuneata"), "Other taxa", ~italic("Pocillopora damicornis"), ~italic("Porites spp."), ~ italic("Seriatopora hystrix"),~italic("Stylophora pistillata")))   + labs(x = "Taxa", y = "Coral disease prevalence %") + facet_wrap(~ Site)  + # axis title size +
+theme(panel.background = element_blank()) + # re label legend axis
+scale_fill_viridis(discrete = TRUE, option = "B") # ChoOSE OPTIONS BETWEEN a-d FOR DIFF COLOURS
+#barplot(1:7, col = magma(7))+
+theme(plot.title = element_text(size = 10)) + # main title 
+theme(axis.text.x = element_text(angle = 90, size = 10)) + theme(legend.text=element_text(size=10)) + theme(axis.text.y = element_text(size = 10), axis.title.x = element_text(size = 10, vjust = -0.8), axis.title.y = element_text(size = 10, vjust = 1))  
+taxaDISEASE
+```
+
+
+```{r}
+# bar plots 
+dd.stacked <- DISEASE
+
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Favia")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Favites")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Cyphastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Echinopora")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Pavona")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Mussidae")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Montastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Goniastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Astrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Paragoniastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Goniopora")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Homophyllia")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Acanthastrea")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Lobophyllia")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Stylophora")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Platygyra")
+dd.stacked<- dplyr::filter(dd.stacked, Genera != "Echinophyllia")
+
+
+DISEASE.ID.counts <- ddply(dd.stacked, c("Site", "Month", "Transect", "Genera"), summarise, Bleached =sum(Unhealthy.ID == "Bleached"), Competition =sum(Unhealthy.ID == "Competition"), Dead = sum(Unhealthy.ID == "Dead"),White.syndrome =sum(Unhealthy.ID == "White syndrome"), Drupella =sum(Unhealthy.ID == "Drupella"), Fluoresence =sum(Unhealthy.ID == "Fluoresence"), Growth.anomaly =sum(Unhealthy.ID == "Growth anomaly"), Healthy = sum(Unhealthy.ID == "Healthy"), Injured =sum(Unhealthy.ID == "Injured"), Pale =sum(Unhealthy.ID == "Pale"),SEB = sum(Unhealthy.ID == "SEB"), Partially.Dead = sum(Unhealthy.ID == "Partially Dead"), Predation = sum(Unhealthy.ID == "Predation"))
+                           
+                           
+DISEASE.ID.counts.long <- gather(DISEASE.ID.counts, Unhealthy.ID, count,Bleached:Predation)
+DISEASE.ID.counts.long$Unhealthy.ID <- as.factor(DISEASE.ID.counts.long$Unhealthy.ID)
+DISEASE.ID.counts.long
+
+# use ddply to get %
+
+Disease.percent <- ddply(dd.stacked, c("Site",  "Month", "Transect", "Genera"), summarise, Bleached = sum(Unhealthy.ID == "Bleached")/ length(Unhealthy.ID)*100, Competition = sum(Unhealthy.ID == "Competition")/ length(Unhealthy.ID)*100, Dead = sum(Unhealthy.ID == "Dead")/ length(Unhealthy.ID)*100,White.syndrome =sum(Unhealthy.ID == "White syndrome")/length(Unhealthy.ID)*100, Drupella = sum(Unhealthy.ID == "Drupella")/ length(Unhealthy.ID)*100, Fluoresence = sum(Unhealthy.ID == "Fluoresence")/ length(Unhealthy.ID)*100, Growth.anomaly = sum(Unhealthy.ID == "Growth anomaly")/ length(Unhealthy.ID)*100, Healthy = sum(Unhealthy.ID == "Healthy")/ length(Unhealthy.ID)*100,  Injured = sum(Unhealthy.ID == "Injured")/ length(Unhealthy.ID)*100,  Pale = sum(Unhealthy.ID == "Pale")/ length(Unhealthy.ID)*100,SEB = sum(Unhealthy.ID == "SEB")/ length(Unhealthy.ID)*100, Partially.Dead = sum(Unhealthy.ID == "Partially Dead")/ length(Unhealthy.ID)*100,  Predation = sum(Unhealthy.ID == "Predation")/ length(Unhealthy.ID)*100)
+ 
+
+DISEASE.ID.counts.long <- gather(Disease.percent, Unhealthy.ID, Disease.percent, Bleached:Predation)
+
+Disease.percent.sum <- ddply(DISEASE.ID.counts.long, c("Site","Month",  "Unhealthy.ID", "Genera"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+
+```{r}
+
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Competition")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Bleached")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Dead")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Injured")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Drupella")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Fluoresence")
+Disease.percent.sum<- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Predation")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Partially.Dead")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Echinophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Pale")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "E ")
+
+  taxaDISEASE <- ggplot(Disease.percent.sum, aes(fill=Unhealthy.ID, y=mean, x=Genera))  + 
+    geom_bar(position="stack", stat="identity")+  theme(legend.title = element_blank())  + labs(x = "Taxa", y = "Coral disease prevalence %") + facet_wrap(~ Site + Month)  + # axis title size +
+theme(panel.background = element_blank()) + # re label legend axis
+theme(plot.title = element_text(size = 10)) + # main title 
+theme(axis.text.x = element_text(angle = 0, size = 10)) + theme(legend.text=element_text(size=10)) + theme(axis.text.y = element_text(size = 10), axis.title.x = element_text(size = 10, vjust = -0.8), axis.title.y = element_text(size = 10, vjust = 1)) + scale_fill_manual(values=c("thistle3", "tan", "slategray3"))+theme(legend.position = "none") + theme(
+  strip.background = element_blank(),
+  strip.text.x = element_blank()
+) # remove facet_wrap titles
+  taxaDISEASE
+```
+```{r}
+
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Competition")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Bleached")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Dead")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Injured")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Drupella")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Fluoresence")
+Disease.percent.sum<- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Predation")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Partially.Dead")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Echinophyllia")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "Pale")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.ID != "E ")
+
+  taxaDISEASE <- ggplot(Disease.percent.sum, aes(fill=Unhealthy.ID, y=mean, x=Genera))  + 
+    geom_bar(position="stack", stat="identity")+  theme(legend.title = element_blank())  + labs(x = "Taxa", y = "Coral disease prevalence %") + facet_wrap(~ Month + Site)  + # axis title size +
+theme(panel.background = element_blank()) + # re label legend axis
+theme(plot.title = element_text(size = 10)) + # main title 
+theme(axis.text.x = element_text(angle = 0, size = 10)) + theme(legend.text=element_text(size=10)) + theme(axis.text.y = element_text(size = 10), axis.title.x = element_text(size = 10, vjust = -0.8), axis.title.y = element_text(size = 10, vjust = 1)) + scale_fill_manual(values=c("thistle3", "tan", "slategray3"))+theme(legend.position = "none") + theme(
+  strip.background = element_blank(),
+  strip.text.x = element_blank()
+) # remove facet_wrap titles
+  taxaDISEASE
+```
+
+```{r}
+# bar plots 
+
+
+
+DISEASE.counts.long <- gather(DISEASE.counts, Unhealthy.status, count, Bleached:Other)
+DISEASE.counts.long$Unhealthy.status <- as.factor(DISEASE.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c(  "Month", "Transect", "Genera"), summarise, Bleached = sum(Unhealthy.status == "Bleached")/ length(Unhealthy.status)*100, Disease = sum(Unhealthy.status == "Disease")/ length(Unhealthy.status)*100,  Healthy = sum(Unhealthy.status == "Healthy")/ length(Unhealthy.status)*100, Other = sum(Unhealthy.status == "Other")/length(Unhealthy.status)*100)
+ 
+
+DISEASE.counts.long <- gather(Disease.percent, Unhealthy.status, Disease.percent, Bleached:Other)
+
+Disease.percent.sum <- ddply(DISEASE.counts.long, c( "Unhealthy.status", "Month", "Genera"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+```{r}
+# bar plots 
+
+DISEASE.counts <- ddply(DISEASE, c("Site", "Month", "Transect", "Genera"), summarise, Algae = sum(Unhealthy.status == "Algae"), Bleached = sum(Unhealthy.status == "Bleached"), Disease = sum(Unhealthy.status == "Disease"),  Healthy = sum(Unhealthy.status == "Healthy"),    Other = sum(Unhealthy.status == "Other"))
+
+
+DISEASE.counts.long <- gather(DISEASE.counts, Unhealthy.status, count, Bleached:Other)
+DISEASE.counts.long$Unhealthy.status <- as.factor(DISEASE.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c("Site",  "Month", "Transect", "Genera"), summarise, Bleached = sum(Unhealthy.status == "Bleached")/ length(Unhealthy.status)*100, Disease = sum(Unhealthy.status == "Disease")/ length(Unhealthy.status)*100,  Healthy = sum(Unhealthy.status == "Healthy")/ length(Unhealthy.status)*100, Other = sum(Unhealthy.status == "Other")/length(Unhealthy.status)*100)
+ 
+
+DISEASE.counts.long <- gather(Disease.percent, Unhealthy.status, Disease.percent, Bleached:Other)
+
+Disease.percent.sum <- ddply(DISEASE.counts.long, c("Site", "Unhealthy.status", "Genera"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+# RELATIVE ABUNDANCE
+```{}
+
+taxaabun <- ggplot(DISEASE.counts, aes(fill=Genera, y=count, x=Site)) + facet_wrap(~Site) + 
+    geom_bar(position="stack", stat="identity")+  theme(legend.title = element_blank())   + scale_fill_discrete(labels = c("Abiotic", "Algae", "Dead coral", "Other invertebrates", "Seagrass", "Soft coral", "Stony coral"))  +  scale_fill_discrete(name = "Coral taxa", labels = c(~ italic("Acropora spp."), ~italic ("Isopora cuneata"), "Other taxa", ~italic("Pocillopora damicornis"), ~italic("Porites spp."), ~ italic("Seriatopora hystrix"),~italic("Stylophora pistillata")))   + labs(x = "Site", y = "Coral taxa absolute abundance")  + # axis title size +
+theme(panel.background = element_blank()) + # re label legend axis
+scale_fill_viridis(discrete = TRUE, option = "B") # ChoOSE OPTIONS BETWEEN a-d FOR DIFF COLOURS
+#barplot(1:7, col = magma(7))+
+theme(plot.title = element_text(size = 10)) + # main title 
+theme(axis.text.x = element_text(angle = 45, size = 10)) + theme(legend.text=element_text(size=10)) + theme(axis.text.y = element_text(size = 10), axis.title.x = element_text(size = 10, vjust = -0.8), axis.title.y = element_text(size = 10, vjust = 1)) 
+
+taxaabun
+
+rlang::last_error()
+```
+```{}
+
+
+DD.TAXA <- Disease.percent
+DD.TAXA
+
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Favia")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Favites")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Cyphastrea")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Echinopora")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Pavona")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Mussidae")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Montastrea")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Goniastrea")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Astrea")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Paragoniastrea")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Goniopora")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Homophyllia")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Acanthastrea")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "?")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Lobophyllia")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Stylophora")
+DD.TAXA<- dplyr::filter(DD.TAXA, Genera != "Platygyra")
+
+DD.TAXA
+```
+
+```{}
+fit1<- glmmTMB(Genera~Site*Month , family = nbinom1, data = Disease.percent)
+Anova(fit1)
+summary(fit1)
+AIC(fit1)
+
+fit2 <- glmmTMB(Disease~Site*Month* Genera , family = nbinom2, data = Disease.percent)
+Anova(fit2)
+summary(fit2)
+AIC(fit2)
+
+fit3 <- glmmTMB(Disease~Site*Month + (1|Transect), family = poisson, data = Disease.percent)
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+fit4 <- glmmTMB(Disease~Site*Month* Genera, family = poisson, data = Disease.percent)
+Anova(fit4)
+summary(fit4)
+AIC(fit4)
+
+plot(simulateResiduals(fit1))
+plot(simulateResiduals(fit2))
+plot(simulateResiduals(fit3))
+plot(simulateResiduals(fit4))
+
+```
+# species stats b/w species and sites and months
+```{r}
+# run a general linear model because none of my variables are independent 
+
+
+Acro.counts <- ddply(Acro.disease, c("Site", "Month", "Transect", "Genera"), summarise, Disease = sum(Unhealthy.status == "Disease"))
+
+
+Acro.counts.long <- gather(Acro.counts, Unhealthy.status, count, Disease)
+Acro.counts.long$Unhealthy.status <- as.factor(Acro.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+Acro.percent <- ddply(Acro.disease, c("Site",  "Month", "Transect", "Genera"), summarise, Disease = sum(Unhealthy.status == "Disease")/length(Unhealthy.status)*100)
+ 
+Acro.percent
+
+Acro.counts.long <- gather(Acro.percent, Unhealthy.status, Acro.percent, Disease)
+
+Acro.percent.sum <- ddply(Acro.counts.long, c("Site", "Unhealthy.status", "Month", "Genera"), summarise,
+               N    = length(Acro.percent),
+               mean = mean(Acro.percent),
+               sd   = sd(Acro.percent),
+               se   = sd / sqrt(N)
+)
+Acro.percent.sum
+
+```
+
+
+
+# species stats on disease 
+```{r}
+# run a general linear model because none of my variables are independent 
+Acro.disease <- DISEASE[which(DISEASE$Genera == 'Acropora'),]
+
+Acro.counts <- ddply(Acro.disease, c("Site", "Month", "Transect", "Genera"), summarise, Disease = sum(Unhealthy.status == "Disease"))
+
+
+Acro.counts.long <- gather(Acro.counts, Unhealthy.status, count, Disease)
+Acro.counts.long$Unhealthy.status <- as.factor(Acro.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+Acro.percent <- ddply(Acro.disease, c("Site",  "Month", "Transect", "Genera"), summarise, Disease = sum(Unhealthy.status == "Disease")/length(Unhealthy.status)*100)
+ 
+Acro.percent
+
+Acro.counts.long <- gather(Acro.percent, Unhealthy.status, Acro.percent, Disease)
+
+Acro.percent.sum <- ddply(Acro.counts.long, c("Site", "Unhealthy.status", "Month", "Genera"), summarise,
+               N    = length(Acro.percent),
+               mean = mean(Acro.percent),
+               sd   = sd(Acro.percent),
+               se   = sd / sqrt(N)
+)
+Acro.percent.sum
+
+```
+
+```{r}
+
+#fit1<- glmmTMB(Disease~Site*Month , family = nbinom1, data = Acro.percent)
+#Anova(fit1)
+#summary(fit1)
+#AIC(fit1)
+
+fit2 <- glmmTMB(Disease~Site*Month , family = nbinom2, data = Acro.percent)
+Anova(fit2)
+summary(fit2)
+AIC(fit2)
+
+#fit3 <- glmmTMB(Disease~Site*Month + (1|Transect), family = poisson, data = Disease.percent)
+#Anova(fit3)
+#summary(fit3)
+#AIC(fit3)
+
+#fit4 <- glmmTMB(Disease~Site*Month, family = poisson, data = Acro.percent)
+#Anova(fit4)
+#summary(fit4)
+#AIC(fit4)
+
+#plot(simulateResiduals(fit1))
+plot(simulateResiduals(fit2))
+#plot(simulateResiduals(fit3))
+#plot(simulateResiduals(fit4))
+
+```
+```{}
+ECO.stylo <- ECO[which(ECO$Taxa == 'Stylophora'),]
+#ECO.stylo
+ECO.iso <- ECO[which(ECO$Taxa == 'Isopora'),]
+ECO.acro <- ECO[which(ECO$Taxa == 'Acropora'),]
+ECO.seri <- ECO[which(ECO$Taxa == 'Seriatopora'),]
+ECO.pdam <- ECO[which(ECO$Taxa == 'Pocillopora'),]
+ECO.Por <- ECO[which(ECO$Taxa == 'Porites'),]
+ECO.other <- ECO[which(ECO$Taxa == 'Other taxa'),]
+# fit 3 - poisson is the best fit 
+```
+
+# checking for pairwise comparisons  
+```{r}
+acrocomps <- emmeans(fit2, ~Site)
+
+acrocomps1 <- emmeans(fit2, ~Month)
+
+acrocomps2 <- emmeans(fit2, ~Site|Month)
+
+acrocomps4 <- emmeans(fit2, ~Month|Site)
+
+pairs(acrocomps)
+
+pairs(acrocomps1)
+
+pairs(acrocomps2)
+
+pairs(acrocomps4)
+```
+# run a general linear model because none of my variables are independent 
+```{r}
+Iso.disease <- DISEASE[which(DISEASE$Genera == 'Isopora'),]
+
+Iso.counts <- ddply(Iso.disease, c("Site", "Month", "Transect", "Genera"), summarise, Disease = sum(Unhealthy.status == "Disease"))
+
+
+Iso.counts.long <- gather(Iso.counts, Unhealthy.status, count, Disease)
+Iso.counts.long$Unhealthy.status <- as.factor(Iso.counts.long$Unhealthy.status)
+
+# use ddply to get %
+
+Iso.percent <- ddply(Iso.disease, c("Site",  "Month", "Transect", "Genera"), summarise, Disease = sum(Unhealthy.status == "Disease")/length(Unhealthy.status)*100)
+ 
+Iso.percent
+
+Iso.counts.long <- gather(Iso.percent, Unhealthy.status, Iso.percent, Disease)
+
+Iso.percent.sum <- ddply(Iso.counts.long, c("Site", "Unhealthy.status", "Month", "Genera"), summarise,
+               N    = length(Iso.percent),
+               mean = mean(Iso.percent),
+               sd   = sd(Iso.percent),
+               se   = sd / sqrt(N)
+)
+Iso.percent.sum
+
+```
+
+```{r}
+
+fit1<- glmmTMB(Disease~Site*Month  + (1|Transect), family = nbinom1, data = Iso.percent)
+Anova(fit1)
+summary(fit1)
+AIC(fit1)
+
+#fit2 <- glmmTMB(Disease~Site*Month , family = nbinom2, data = Iso.percent)
+#Anova(fit2)
+#summary(fit2)
+#AIC(fit2)
+
+#fit3 <- glmmTMB(Disease~Site*Month + (1|Transect), family = poisson, data = Iso.percent)
+#Anova(fit3)
+#summary(fit3)
+#AIC(fit3)
+
+#fit4 <- glmmTMB(Disease~Site*Month, family = poisson, data = Iso.percent)
+#Anova(fit4)
+#summary(fit4)
+#AIC(fit4)
+
+plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit2))
+#plot(simulateResiduals(fit3))
+#plot(simulateResiduals(fit4))
+
+```
+
+# checking for pairwise comparisons  
+```{r}
+Isocomps <- emmeans(fit1, ~Site)
+
+Isocomps1 <- emmeans(fit1, ~Month)
+
+Isocomps2 <- emmeans(fit1, ~Site|Month)
+
+Isocomps4 <- emmeans(fit1, ~Month|Site)
+
+pairs(Isocomps)
+
+pairs(Isocomps1)
+
+pairs(Isocomps2)
+
+pairs(Isocomps4)
+```
+
+
+
+# percent of lesion per colony of diseased taxa 
+
+```{r}
+# bar plots 
+ACRO <- DISEASE[DISEASE$Genera == "Acropora", ]
+#plot % of coral UH
+ACRO
+
+ACROLESION <- plot(ACRO$Month, ACRO$percentUH, main="Acropora lesion size",
+   xlab="Month ", ylab="Lesion perecenatge of coral colony (%)", pch=19)
+
+ACROLESION
+
+```
+```{r}
+# bar plots 
+PORITES <- DISEASE[DISEASE$Genera == "Porites", ]
+#plot % of coral UH
+PORITES
+
+PORLESION <- plot(PORITES$Month, PORITES$percentUH, main="Porites lesion size",
+   xlab="Month ", ylab="Lesion perecenatge of coral colony (%)", pch=19)
+
+PORLESION
+
+```
+
+```{r}
+# bar plots 
+ISO <- DISEASE[DISEASE$Genera == "Isopora", ]
+#plot % of coral UH
+ISO
+
+ISOLESION <- plot(ISO$Month, ISO$percentUH, main="Isopora lesion size",
+   xlab="Month ", ylab="Lesion perecenatge of coral colony (%)", pch=19)
+
+ISOLESION
+
+```
+
+
+
+```{r}
+# bar plots 
+MONTI <- DISEASE[DISEASE$Genera == "Montipora", ]
+#plot % of coral UH
+MONTI
+
+MONTILESION <- plot(MONTI$Month, MONTI$percentUH, main="Montipora lesion size",
+   xlab="Month ", ylab="Lesion perecenatge of coral colony (%)", pch=19)
+
+MONTILESION
+
+```
+
+
+```{r}
+# bar plots 
+PDAM <- DISEASE[DISEASE$Genera == "Pocillopora", ]
+#plot % of coral UH
+PDAM
+
+PDAMLESION <- plot(PDAM$Month, PDAM$percentUH, main="Pocillopora lesion size",
+   xlab="Month ", ylab="Lesion perecenatge of coral colony (%)", pch=19)
+
+PDAMLESION
+
+```
+
+```{r}
+# bar plots 
+SERI <- DISEASE[DISEASE$Genera == "Seriatopora", ]
+#plot % of coral UH
+SERI
+
+SERILESION <- plot(SERI$Month,SERI$percentUH, main="Seriatopora lesion size",
+   xlab="Month ", ylab="Lesion perecenatge of coral colony (%)", pch=19)
+
+SERILESION
+
+```
+# percent of lesion per colony of WHITE SYNDROME
+
+```{r}
+# bar plots 
+WS <- DISEASE[DISEASE$Unhealthy.ID == "White syndrome", ]
+#plot % of coral UH
+WS
+
+WSLESION <- plot( WS$percentUH, main="White syndrome lesion size",
+   xlab="Month ", ylab="Lesion perecenatge of coral colony (%)", pch=19)
+
+WSLESION
+
+```
+
+```{r}
+# bar plots 
+WS <- DISEASE[DISEASE$Unhealthy.ID == "White syndrome", ]
+#plot % of coral UH
+WS
+
+WSLESION <- plot(WS$Month, WS$percentUH, main="White syndrome lesion size",
+   xlab="Month ", ylab="Lesion perecenatge of coral colony (%)", pch=19)
+
+WSLESION
+
+```
+
+# SIZE OF COLONIES DISEASED
+
+```{r}
+# bar plots 
+
+DISEASE.size.counts <- ddply(DISEASE, c("Month", "Transect", "Unhealthy.status"), summarise, L = sum(Size == "L"), M = sum(Size == "M"), S = sum(Size == "S"))
+
+
+DISEASE.size.counts.long <- gather(DISEASE.size.counts, Size, count, L, M, S)
+DISEASE.size.counts.long$Size <- as.factor(DISEASE.size.counts.long$Size)
+#DISEASE.counts.long$Unhealthy.status <- as.factor(DISEASE.counts.long$Unhealthy.status)
+# use ddply to get %
+
+Disease.size.percent <- ddply(DISEASE, c(  "Month", "Transect", "Unhealthy.status"), summarise, L = sum(Size == "L")/ length(Size)*100, M = sum(Size == "M")/ length(Size)*100, S = sum(Size == "S")/ length(Size)*100) 
+ 
+
+DISEASE.size.counts.long <- gather(Disease.size.percent, Size, Disease.size.percent, L, M, S)
+
+Disease.size.percent.sumER <- ddply(DISEASE.size.counts.long, c("Month","Size", "Unhealthy.status"), summarise,
+               N    = length(Disease.size.percent),
+               mean = mean(Disease.size.percent),
+               sd   = sd(Disease.size.percent),
+               se   = sd / sqrt(N)
+)
+Disease.size.percent.sumER
+
+```
+
+```{r}
+sizedisease <- DISEASE[DISEASE$Unhealthy.status == "Disease", ]
+#plot % of coral UH
+ISO
+
+sizedisease2 <- plot(sizedisease$Month, sizedisease$Size, main="Coral colony size with disease",
+   xlab="Month ", ylab="Size of coral colony (%) with disease", pch=19)
+
+sizedisease2
+```
+```{r}
+
+Disease.size.percent.sumER <- dplyr::filter(Disease.size.percent.sumER, Unhealthy.status != "Healthy")
+Disease.size.percent.sumER <- dplyr::filter(Disease.size.percent.sumER, Unhealthy.status != "Bleached")
+Disease.size.percent.sumER <- dplyr::filter(Disease.size.percent.sumER, Unhealthy.status != "Other")
+b <- ggplot(Disease.size.percent.sumER, aes(x = Unhealthy.status,y = mean, fill= Size))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + labs(title = "Disease prevalence per taxa over time at Coral Garden") + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90)) + facet_wrap(~ Month)
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+
+b
+
+```
+
+# taxa relative abundance 
+```{r}
+# bar plots 
+
+taxa.counts <- ddply(DISEASE, c("Site", "Month", "Transect"), summarise,Acropora =sum(Taxa == "Acropora"), Seriatopora =sum(Taxa == "Seriatopora"), Stylophora = sum(Taxa == "Stylophora"),Pocillopora =sum(Taxa == "Pocillopora"), Other =sum(Taxa == "Other"), Isopora =sum(Taxa == "Isopora"), Porites =sum(Unhealthy.ID == "Porites"))
+                           
+                           
+taxa.counts.long <- gather(taxa.counts, Taxa, count, Acropora, Seriatopora, Stylophora, Pocillopora, Other, Isopora, Porites)
+taxa.counts.long$Taxa <- as.factor(taxa.counts.long$Taxa)
+taxa.counts.long
+
+# use ddply to get %
+
+taxa.percent <- ddply(DISEASE, c("Site",  "Month", "Transect"),  summarise,Acropora =sum(Taxa == "Acropora")/length(DISEASE)*100, Seriatopora =sum(Taxa == "Seriatopora")/length(DISEASE)*100, Stylophora = sum(Taxa == "Stylophora")/length(DISEASE)*100,Pocillopora =sum(Taxa == "Pocillopora")/length(DISEASE)*100, Other =sum(Taxa == "Other")/length(DISEASE)*100, Isopora =sum(Taxa == "Isopora")/length(DISEASE)*100, Porites =sum(Unhealthy.ID == "Porites")/length(DISEASE)*100)
+ 
+taxa.percent
+taxa.counts.long <- gather(taxa.percent, Taxa, taxa.percent, Acropora, Seriatopora, Stylophora, Pocillopora, Other, Isopora, Porites)
+
+taxa.percent.sum <- ddply(taxa.counts.long, c("Site","Month",  "Taxa"), summarise,
+               N    = length(taxa.percent),
+               mean = mean(taxa.percent),
+               sd   = sd(taxa.percent),
+               se   = sd / sqrt(N)
+)
+taxa.percent.sum
+
+```
+
+# SIZE and coral disease
+
+```{r}
+# bar plots 
+
+DISEASE.counts <- ddply(DISEASE, c( "Month", "Transect", "Unhealthy.status"), summarise, S = sum(Size == "S"), M = sum(Size == "M"), L = sum(Size == "L"))
+
+
+DISEASE.counts.long <- gather(DISEASE.counts, Size, count, S:L)
+DISEASE.counts.long$Size <- as.factor(DISEASE.counts.long$Size)
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASE, c(  "Month", "Transect",  "Unhealthy.status"), summarise, S = sum(Size == "S")/length(Unhealthy.status)*100, M = sum(Size == "M")/length(Unhealthy.status)*100, L = sum(Size == "L")/length(Unhealthy.status)*100) 
+ 
+
+DISEASE.counts.long <- gather(Disease.percent, Size, Disease.percent, S:L)
+
+Disease.percent.sum <- ddply(DISEASE.counts.long, c( "Unhealthy.status", "Month", "Size"), summarise,
+               N    = length(Disease.percent),
+               mean = mean(Disease.percent),
+               sd   = sd(Disease.percent),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+
+```
+
+```{r}
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Bleached")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Healthy")
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Unhealthy.status != "Other")
+
+b <- ggplot(Disease.percent.sum, aes(x = Size,y = mean, fill= Month))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("2018 November" = "black", "2019 March" = "grey", "2019 October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20)) + labs(title = "Disease prevalence per taxa over time at LHI") + ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+
+b <- b + theme(axis.text.x = element_text(angle = 90)) #+ facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 15, face = "bold")) # text size of facet label titles
+b <- b + scale_fill_manual(values=c("#FF9933", "#CC0066", "#330066"))+theme(legend.position = "none") 
+b
+```
+
+
+

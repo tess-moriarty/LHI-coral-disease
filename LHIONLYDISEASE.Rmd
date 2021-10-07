@@ -1,0 +1,135 @@
+---
+title: "LHI_only_Disease"
+author: "Tess Moriarty"
+date: "03/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+```{R, include = FALSE}
+# load packages
+library(tidyr)
+#install.packages("Hmisc")
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(lme4)
+library(ggplot2)
+library(car)
+library(MASS)
+library(glmmTMB)
+library(DHARMa)
+#install.packages("multcomp")
+library(multcomp)
+library(emmeans)
+library(RColorBrewer)
+library(viridis)
+library(png)
+dev.new(width=8, height=6, unit="in")
+plot(1:40)
+dev.new(width = 850, height = 530, unit = "px")
+plot(1:15)
+```
+
+# load disease data
+
+```{r}
+setwd("~/Documents/Lord Howe Island/Disease")
+DISEASEDISEASE <- read.csv("LHIONLYDISEASE.csv", stringsAsFactors = FALSE, header = T, fill = TRUE)
+DISEASEDISEASE$Site <- as.factor(DISEASEDISEASE$Site)
+DISEASEDISEASE$Month <- as.factor(DISEASEDISEASE$Month)
+DISEASEDISEASE$Size <- as.factor(DISEASEDISEASE$Size)
+DISEASEDISEASE$Health.status <- as.factor(DISEASEDISEASE$Health.status)
+DISEASEDISEASE$Growth.form <- as.factor(DISEASEDISEASE$Growth.form)
+DISEASEDISEASE$Unhealthy.status <- as.factor(DISEASEDISEASE$Unhealthy.status)
+DISEASEDISEASE$Unhealthy.ID <- as.factor(DISEASEDISEASE$Unhealthy.ID)
+DISEASEDISEASE$Species <- as.factor(DISEASEDISEASE$Species)
+DISEASEDISEASE$Transect <- as.factor(DISEASEDISEASE$Transect)
+DISEASEDISEASE$Genera <- as.factor(DISEASEDISEASE$Genera)
+DISEASEDISEASE$Date <- as.Date(DISEASEDISEASE$Date, "%d/%m/%y")
+DISEASEDISEASE$percentUH <- as.numeric(DISEASEDISEASE$percentUH)
+DISEASEDISEASE$Taxa <- as.factor(DISEASEDISEASE$Taxa)
+str(DISEASEDISEASE)
+```
+
+```{R}
+DISEASE.counts <- ddply(DISEASEDISEASE, c("Site", "Month", "Transect", "Unhealthy.status"), summarise, Acanthastrea =sum(Genera == "Acanthastrea"), Acropora = sum(Genera == "Acropora"), Astrea = sum(Genera == "Astrea"), Cythastrea = sum(Genera == "Cythastrea"), Echinopora = sum(Genera == "Echinopora "), Favia = sum(Genera == "Favia"), Favites = sum(Genera == "Favites"), Goniopora = sum(Genera == "Goniopora"), Homophyllia = sum(Genera == "Homophyllia"), Isopora = sum(Genera == "Isopora"), Montipora = sum(Genera == "Montipora"), Paragoniastrea = sum(Genera == "Paragoniastrea"), Pavona = sum(Genera == "Pavona"), Platygyra = sum(Genera == "Platygyra"), Pocillopora = sum(Genera == "Pocillopora"), Porites = sum(Genera == "Porites"), Seriatopora = sum(Genera == "Seriatopora"), Stylophora = sum(Genera == "Stylophora"), Turbinaria = sum(Genera == "Turbinaria"), Mussidae = sum(Genera == "Mussidae"), Montastrea = sum(Genera == "Montastrea"))
+
+DISEASE.counts
+
+DISEASE.counts.long <- gather(DISEASE.counts, Genera, count, Acanthastrea:Montastrea)
+DISEASE.counts.long$Genera <- as.factor(DISEASE.counts.long$Genera)
+
+# use ddply to get %
+
+Disease.percent <- ddply(DISEASEDISEASE, c("Site",  "Month", "Transect", "Unhealthy.status"), summarise, Acanthastrea =sum(Genera == "Acanthastrea")/ length(Genera)*100, Acropora = sum(Genera == "Acropora")/ length(Genera)*100, Astrea = sum(Genera == "Astrea")/ length(Genera)*100, Cythastrea = sum(Genera == "Cythastrea")/ length(Genera)*100, Echinopora = sum(Genera == "Echinopora ")/ length(Genera)*100, Favia = sum(Genera == "Favia")/ length(Genera)*100, Favites = sum(Genera == "Favites")/ length(Genera)*100, Goniopora = sum(Genera == "Goniopora")/ length(Genera)*100, Homophyllia = sum(Genera == "Homophyllia")/ length(Genera)*100, Isopora = sum(Genera == "Isopora")/ length(Genera)*100, Montipora = sum(Genera == "Montipora")/ length(Genera)*100, Paragoniastrea = sum(Genera == "Paragoniastrea")/ length(Genera)*100, Pavona = sum(Genera == "Pavona")/ length(Genera)*100, Platygyra = sum(Genera == "Platygyra")/ length(Genera)*100, Pocillopora = sum(Genera == "Pocillopora")/ length(Genera)*100, Porites = sum(Genera == "Porites")/ length(Genera)*100, Seriatopora = sum(Genera == "Seriatopora")/ length(Genera)*100, Stylophora = sum(Genera == "Stylophora")/ length(Genera)*100, Turbinaria = sum(Genera == "Turbinaria")/ length(Genera)*100, Mussidae = sum(Genera == "Mussidae"), Montastrea = sum(Genera == "Montastrea")/ length(Genera)*100)
+ 
+Disease.percent
+
+DISEASE.percent.long <- gather(Disease.percent, Genera, DISEASE.counts,  Acanthastrea:Montastrea)
+DISEASE.counts.long
+
+Disease.percent.sum <- ddply(DISEASE.percent.long, c("Site",  "Month", "Genera"), summarise,
+               N    = length(DISEASE.counts),
+               mean = mean(DISEASE.counts),
+               sd   = sd(DISEASE.counts),
+               se   = sd / sqrt(N)
+)
+Disease.percent.sum
+```
+
+# disease for the 6 coral taxa over time and site no healthy
+```{r, fig.width = 6}
+Disease.percent.sum <- dplyr::filter(Disease.percent.sum, Genera != "Healthy")
+b <- ggplot(Disease.percent.sum, aes(x = Genera,y = mean, fill= Month))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 20))+ ylab("Mean prevalence (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=15, vjust=2.5))
+#b <- b  + theme(axis.title.x = element_text(angle=0, size=20, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=15, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=15)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 0)) + facet_wrap(~ Site)
+b <- b + theme(strip.text.x = element_text(size = 15, face = "bold")) # text size of facet label titles
+b <- b + scale_fill_manual(values=c("#FF9933", "#CC0066", "#330066"))+theme(legend.position = "none") 
+b
+```
+
+
+```{R}
+fit1<- glmmTMB(mean~Site*Month*Genera , family = nbinom1, data = Disease.percent.sum)
+Anova(fit1)
+summary(fit1)
+AIC(fit1)
+
+fit2 <- glmmTMB(Genera~Site*Month* Genera , family = nbinom2, data = Disease.percent)
+Anova(fit2)
+summary(fit2)
+AIC(fit2)
+
+fit3 <- glmmTMB(Genera~Site*Month + (1|Transect), family = poisson, data = Disease.percent)
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+fit4 <- glmmTMB(Genera~Site*Month* Genera, family = poisson, data = Disease.percent)
+Anova(fit4)
+summary(fit4)
+AIC(fit4)
+
+plot(simulateResiduals(fit1))
+plot(simulateResiduals(fit2))
+plot(simulateResiduals(fit3))
+plot(simulateResiduals(fit4))
+
+```

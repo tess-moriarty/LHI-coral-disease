@@ -1,0 +1,1128 @@
+---
+title: "LHI_BL_DISEASE.NODEAD_NO_DEAD"
+author: "Tess Moriarty"
+date: "07/08/2020"
+output:
+  html_document: default
+  pdf_document: default
+fig_width: 4
+fig_text: 10
+fig_height: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{R, include = FALSE}
+# load packages
+
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(lme4)
+library(ggplot2)
+library(car)
+library(MASS)
+library(glmmTMB)
+library(DHARMa)
+library(multcomp)
+library(emmeans)
+library(RColorBrewer)
+install.packages("tidyverse")
+library(tidyverse)
+library(vegan)
+library(phyloseq)
+library(viridis)
+install.packages('unikn')
+library('unikn')    
+```
+
+# load photo quadrat data
+
+```{r}
+getwd()
+setwd("~/Documents/Tess_PhD/Lord Howe Island/Disease")
+DISEASE.NODEAD <- read.csv("LHIDISEASER1nodead.csv", stringsAsFactors = FALSE, header = T, fill = TRUE)
+DISEASE.NODEAD$Site <- as.factor(DISEASE.NODEAD$Site)
+DISEASE.NODEAD$Date <- as.factor(DISEASE.NODEAD$Date)
+DISEASE.NODEAD$Day <- as.factor(DISEASE.NODEAD$Day)
+DISEASE.NODEAD$Month <- as.factor(DISEASE.NODEAD$Month)
+DISEASE.NODEAD$Year <- as.factor(DISEASE.NODEAD$Year)
+DISEASE.NODEAD$Growth.form <- as.factor(DISEASE.NODEAD$Growth.form)
+DISEASE.NODEAD$Size <- as.factor(DISEASE.NODEAD$Size)
+DISEASE.NODEAD$Transect <- as.factor(DISEASE.NODEAD$Transect)
+DISEASE.NODEAD$Genera <- as.factor(DISEASE.NODEAD$Genera)
+DISEASE.NODEAD$Taxa <- as.factor(DISEASE.NODEAD$Taxa)
+DISEASE.NODEAD$Health.status <- as.factor(DISEASE.NODEAD$Health.status)
+DISEASE.NODEAD$Unhealthy.status <- as.factor(DISEASE.NODEAD$Unhealthy.status)
+DISEASE.NODEAD$Unhealthy <- as.factor(DISEASE.NODEAD$Unhealthy)
+DISEASE.NODEAD$Unhealthy.ID <- as.factor(DISEASE.NODEAD$Unhealthy.ID)
+str(DISEASE.NODEAD)
+```
+
+
+# subset data
+
+```{r}
+DISEASE.NODEAD.br <- DISEASE.NODEAD[which(DISEASE.NODEAD$Growth.form == 'Branching'),]
+DISEASE.NODEAD.dig <- DISEASE.NODEAD[which(DISEASE.NODEAD$Growth.form == 'Digitate'),]
+DISEASE.NODEAD.mas <- DISEASE.NODEAD[which(DISEASE.NODEAD$Growth.form == 'Massive'),]
+DISEASE.NODEAD.sub <- DISEASE.NODEAD[which(DISEASE.NODEAD$Growth.form == 'Sub massive'),]
+DISEASE.NODEAD.en <- DISEASE.NODEAD[which(DISEASE.NODEAD$Growth.form == 'Encrusting'),]
+DISEASE.NODEAD.stag <- DISEASE.NODEAD[which(DISEASE.NODEAD$Growth.form == 'Staghorn'),]
+DISEASE.NODEAD.tab <- DISEASE.NODEAD[which(DISEASE.NODEAD$Growth.form == 'Table'),]
+
+
+DISEASE.NODEAD.BL <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Bleached'),]
+DISEASE.NODEAD.COMP <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Competition'),]
+DISEASE.NODEAD.HF <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Healthy'),]
+DISEASE.NODEAD.OT <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Other'),]
+DISEASE.NODEAD.DIS <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Discoloration'),]
+DISEASE.NODEAD.DRUP <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Drupella'),]
+DISEASE.NODEAD.FLO <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Fluoresence'),]
+DISEASE.NODEAD.GA <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Growth anomaly'),]
+DISEASE.NODEAD.INJ <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Injured'),]
+DISEASE.NODEAD.PALE <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Pale'),]
+DISEASE.NODEAD.PDEAD <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Partially Dead'),]
+DISEASE.NODEAD.PRED <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Predation'),]
+DISEASE.NODEAD.TISLOS <- DISEASE.NODEAD[which(DISEASE.NODEAD$Unhealthy.ID == 'Tissue loss'),]
+
+
+DISEASE.NODEAD.stylo <- DISEASE.NODEAD[which(DISEASE.NODEAD$Taxa == 'Stylophora'),]
+#DISEASE.NODEAD.stylo
+DISEASE.NODEAD.seri <- DISEASE.NODEAD[which(DISEASE.NODEAD$Taxa == 'Seriatopora'),]
+DISEASE.NODEAD.pdam <- DISEASE.NODEAD[which(DISEASE.NODEAD$Taxa == 'Pocillopora'),]
+DISEASE.NODEAD.Por <- DISEASE.NODEAD[which(DISEASE.NODEAD$Taxa == 'Porites'),]
+DISEASE.NODEAD.other <- DISEASE.NODEAD[which(DISEASE.NODEAD$Taxa == 'Other'),]
+DISEASE.NODEAD.iso <- DISEASE.NODEAD[which(DISEASE.NODEAD$Taxa == 'Isopora'),]
+DISEASE.NODEAD.acro <- DISEASE.NODEAD[which(DISEASE.NODEAD$Taxa == 'Acropora'),]
+
+```
+
+# try to make 'other' group of coral species
+
+```{r}
+# bar plots 
+
+group.counts <- ddply(DISEASE.NODEAD, c("Site", "Month", "Transect"), summarise,  Acropora= sum(Taxa== "Acropora"), Isopora = sum(Taxa== "Isopora"), Other=sum(Taxa== "Other"), Pocillopora = sum(Taxa== "Pocillopora"), Porites = sum(Taxa== "Porites"), Seriatopora = sum(Taxa== "Seriatopora"), Stylophora = sum(Taxa== "Stylophora"))
+
+#group.counts
+group.counts.long <- gather(group.counts, Taxa, count,  Acropora:Stylophora)
+group.counts.long$Taxa <- as.factor(group.counts.long$Taxa)
+#group.counts.long
+# use ddply to get %
+
+group.percent <- ddply(DISEASE.NODEAD, c( "Site", "Month", "Transect"  ), summarise,  Acropora = sum(Taxa== "Acropora")/ length(Taxa) *100,  
+                       Isopora = sum(Taxa== "Isopora")/ length(Taxa) *100, 
+                       Other=sum(Taxa== "Other")/ length(Taxa) *100, 
+                       Pocillopora = sum(Taxa== "Pocillopora")/ length(Taxa) *100, 
+                       Porites = sum(Taxa== "Porites")/ length(Taxa) *100, 
+                       Seriatopora = sum(Taxa== "Seriatopora")/ length(Taxa) *100, 
+                       Stylophora = sum(Taxa== "Stylophora")/ length(Taxa) *100)
+
+#group.percent
+# Hstatus percent
+
+group.percent.long <- gather(group.percent, Taxa, count, Acropora:Stylophora)
+
+#group.counts.long
+#group.percent.long
+```
+
+
+```{r}
+#  broken down by Site + Month
+group.percent.sum <- ddply(group.percent.long, c("Month" ,"Taxa"), summarise,
+               N    = length(count),
+               mean = mean(count),
+               sd   = sd(count),
+               se   = sd / sqrt(N)
+)
+group.percent.sum
+
+```
+
+```{r}
+
+stacked <- ggplot(group.percent.sum, aes(fill= Taxa, y=mean, x=Month)) + 
+    geom_bar(position="fill", stat="identity")  + theme(axis.text.x = element_text(angle = 45, hjust = 0.8, size = 15), axis.text.y = element_text(angle = 0, hjust = 0.8, size = 15)) + labs(x = "Sample sites and months", y = "relative abundance (%)", title = "Taxa relative abundance between sites and months") +  theme(axis.title = element_text(size = 15)) + # axis title size
+  theme(plot.title = element_text(size = 15)) # main title
+stacked <- stacked + scale_x_discrete(name ="Month")
+
+stacked
+
+```
+```{r}
+#  broken down by Site + Month
+group.percent.sum <- ddply(group.percent.long, c("Site","Month" ,"Taxa"), summarise,
+               N    = length(count),
+               mean = mean(count),
+               sd   = sd(count),
+               se   = sd / sqrt(N)
+)
+group.percent.sum
+
+```
+
+__Relative abundance per site__
+```{r}
+# bar plots 
+
+group.counts <- ddply(DISEASE.NODEAD, c("Site", "Transect"), summarise,  Acropora= sum(Taxa== "Acropora"), Isopora = sum(Taxa== "Isopora"), Other=sum(Taxa== "Other"), Pocillopora = sum(Taxa== "Pocillopora"), Porites = sum(Taxa== "Porites"), Seriatopora = sum(Taxa== "Seriatopora"), Stylophora = sum(Taxa== "Stylophora"))
+
+#group.counts
+group.counts.long <- gather(group.counts, Taxa, count,  Acropora:Stylophora)
+group.counts.long$Taxa <- as.factor(group.counts.long$Taxa)
+#group.counts.long
+# use ddply to get %
+
+group.percent <- ddply(DISEASE.NODEAD, c( "Site",  "Transect"  ), summarise,  Acropora = sum(Taxa== "Acropora")/ length(Taxa) *100,  
+                       Isopora = sum(Taxa== "Isopora")/ length(Taxa) *100, 
+                       Other=sum(Taxa== "Other")/ length(Taxa) *100, 
+                       Pocillopora = sum(Taxa== "Pocillopora")/ length(Taxa) *100, 
+                       Porites = sum(Taxa== "Porites")/ length(Taxa) *100, 
+                       Seriatopora = sum(Taxa== "Seriatopora")/ length(Taxa) *100, 
+                       Stylophora = sum(Taxa== "Stylophora")/ length(Taxa) *100)
+
+#group.percent
+# Hstatus percent
+
+group.percent.long <- gather(group.percent, Taxa, count, Acropora:Stylophora)
+
+#group.counts.long
+#group.percent.long
+```
+
+
+```{r}
+#  broken down by Site + Month
+group.percent.sum <- ddply(group.percent.long, c("Site", "Taxa"), summarise,
+               N    = length(count),
+               mean = mean(count),
+               sd   = sd(count),
+               se   = sd / sqrt(N)
+)
+group.percent.sum
+
+```
+
+
+
+```{r}
+
+group.count.se <- ddply(group.percent.long, c("Site","Month" ,"Taxa"), summarise,
+               N    = length(count),
+               mean = mean(count),
+               sd   = sd(count),
+               se   = sd / sqrt(N)
+)
+group.count.se
+
+abundance <- ggplot(group.count.se, aes(fill= Month, y=mean, x=Taxa)) + 
+    geom_bar(position="dodge", stat="identity")  + facet_wrap(~ Site) + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9)) + theme_test() +theme(legend.position = "none") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) + scale_fill_manual(values=c("#FFFF99", "#FF9933", "purple4")) + scale_y_continuous(limits = c(0, 60))  + ylab("Coral taxa relative abundance (%)")
+
+abundance
+
+```
+# acropora
+```{r}
+
+acropor.relabun <- group.count.se
+acropor.relabun <- dplyr::filter(group.count.se, Taxa != "Stylophora")
+
+acropor.relabun <- group.count.se[which(group.count.se$Taxa == 'Acropora'),]
+acropor.relabun <- ggplot(acropor.relabun , aes(fill= Month, y=mean, x=Month)) + 
+    geom_bar(position="dodge", stat="identity")  + facet_wrap(~ Site) + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9)) +
+scale_fill_manual(values=c("#C7F9EE", "#6DFDD2", "#1AC9E6")) + scale_y_continuous(limits = c(0, 60)) + theme_classic() + ylab("Acropora relative abundance (%)") +theme(legend.position = "none") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+acropor.relabun
+
+```
+```{r}
+
+acropor.relabun <- group.counts.long
+acropor.relabun <- dplyr::filter(group.counts.long, Taxa != "Stylophora")
+
+acropor.relabun <- group.counts.long[which(group.counts.long$Taxa == 'Acropora'),]
+acropor.relabun <- ggplot(acropor.relabun , aes(fill= Month, y=count, x=Month)) + 
+    geom_bar(position="dodge", stat="identity")  + facet_wrap(~ Site) +
+scale_fill_manual(values=c("#C7F9EE", "#6DFDD2", "#1AC9E6")) + scale_y_continuous(limits = c(0, 60)) + theme_classic() + ylab("Acropora absolute abundance (%)") +theme(legend.position = "none") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+acropor.relabun
+
+```
+
+# isopora
+```{r}
+
+isopora.relabun <- group.count.se
+
+isopora.relabun <- group.count.se[which(group.count.se$Taxa == 'Isopora'),]
+iso.abundance <- ggplot(isopora.relabun , aes(fill= Month, y=mean, x=Month)) + 
+    geom_bar(position="dodge", stat="identity")  + facet_wrap(~ Site) + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9)) +
+scale_fill_manual(values=c("#C7F9EE", "#6DFDD2", "#1AC9E6")) + scale_y_continuous(limits = c(0, 60)) + theme_classic() + ylab("Isopora relative abundance (%)") +theme(legend.position = "none") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+iso.abundance
+
+```
+```{r}
+
+isopora.relabun <- group.counts.long
+
+isopora.relabun <- group.counts.long[which(group.counts.long$Taxa == 'Isopora'),]
+iso.abundance <- ggplot(isopora.relabun , aes(fill= Month, y=count, x=Month)) + 
+    geom_bar(position="dodge", stat="identity")  + facet_wrap(~ Site) +
+scale_fill_manual(values=c("#C7F9EE", "#6DFDD2", "#1AC9E6")) + scale_y_continuous(limits = c(0, 60)) + theme_classic() + ylab("Isopora absolute abundance (%)") +theme(legend.position = "none") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+iso.abundance
+
+```
+
+# pocillopora
+```{r}
+
+pdam.relabun <- group.count.se
+
+pdam.relabun <- group.count.se[which(group.count.se$Taxa == 'Pocillopora'),]
+pdam.abundance <- ggplot(pdam.relabun , aes(fill= Month, y=mean, x=Month)) + 
+    geom_bar(position="dodge", stat="identity")  + facet_wrap(~ Site) + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9)) +
+scale_fill_manual(values=c("#C7F9EE", "#6DFDD2", "#1AC9E6")) + scale_y_continuous(limits = c(0, 60)) + theme_classic() + ylab("Pocillopora relative abundance (%)") +theme(legend.position = "none") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+pdam.abundance
+
+```
+# seriatopora
+```{r}
+seri.relabun <- group.count.se
+
+seri.relabun <- group.count.se[which(group.count.se$Taxa == 'Seriatopora'),]
+seri.abundance <- ggplot(seri.relabun , aes(fill= Month, y=mean, x=Month)) + 
+    geom_bar(position="dodge", stat="identity")  + facet_wrap(~ Site) + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9)) +
+scale_fill_manual(values=c("#C7F9EE", "#6DFDD2", "#1AC9E6")) + scale_y_continuous(limits = c(0, 60)) + theme_classic() + ylab("Seriatopora relative abundance (%)") +theme(legend.position = "none") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+seri.abundance
+
+```
+
+# porites
+```{r}
+
+por.relabun <- group.count.se
+
+por.relabun <- group.count.se[which(group.count.se$Taxa == 'Porites'),]
+por.abundance <- ggplot(por.relabun , aes(fill= Month, y=mean, x=Month)) + 
+    geom_bar(position="dodge", stat="identity")  + facet_wrap(~ Site) + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9)) +
+scale_fill_manual(values=c("#C7F9EE", "#6DFDD2", "#1AC9E6")) + scale_y_continuous(limits = c(0, 60)) + theme_classic() + ylab("Porites relative abundance (%)") +theme(legend.position = "none") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+por.abundance
+
+```
+
+
+
+
+```{r}
+
+stacked <- ggplot(group.percent.sum, aes(fill= Taxa, y=mean, x=Month)) + 
+    geom_bar(position="fill", stat="identity")  + facet_wrap(~ Site) + theme(strip.text.x = element_text(angle = 45, hjust = 0.8, size = 18), axis.text.y = element_text(angle = 0, hjust = 0.8, size = 18)) + labs(x = "Sample sites and months", y = "Relative abundance (%)") +  theme(axis.title = element_text(size = 25)) + # axis title size
+  theme(plot.title = element_text(size = 25)) # main title
+stacked <- stacked + scale_x_discrete(name ="Month") + theme_classic(base_size = 15) + 
+theme(plot.title = element_text(size = 15))  # main title 
+ #ylab(expression("Dead" ~italic("Stylophora pistillata") ~"coral colonies (%)")) 
+stacked <- stacked + scale_fill_discrete(name = "Coral taxa", labels = c(~ italic("Acropora spp."), ~italic ("Isopora cuneata"), "Other taxa", ~italic("Pocillopora damicornis"), ~italic("Porites spp."), ~ italic("Seriatopora hystrix"),~italic("Stylophora pistillata")))
+
+stacked
+```
+
+
+```{r}
+
+taxastacked <- ggplot(group.percent.sum, aes(fill=Taxa, y=mean, x=Month)) + facet_wrap(~Site) + 
+    geom_bar(position="fill", stat="identity")+  theme(legend.title = element_blank())   + scale_fill_discrete(labels = c("Abiotic", "Algae", "Dead coral", "Other invertebrates", "Seagrass", "Soft coral", "Stony coral"))  +  scale_fill_discrete(name = "Coral taxa", labels = c(~ italic("Acropora spp."), ~italic ("Isopora cuneata"), "Other taxa", ~italic("Pocillopora damicornis"), ~italic("Porites spp."), ~ italic("Seriatopora hystrix"),~italic("Stylophora pistillata")))   + labs(x = "Site", y = "Coral taxa relative abundance (%)")  + # axis title size +
+theme(panel.background = element_blank()) + # re label legend axis
+scale_fill_viridis(discrete = TRUE, option = "B") # COSE OPTIONS BETWEEN a-d FOR DIFF COLOURS
+barplot(1:7, col = magma(7))+
+theme(plot.title = element_text(size = 10)) + # main title 
+theme(axis.text.x = element_text(angle = 45, size = 10)) + theme(legend.text=element_text(size=10)) + theme(axis.text.y = element_text(size = 10), axis.title.x = element_text(size = 10, vjust = -0.8), axis.title.y = element_text(size = 10, vjust = 1)) 
+
+taxastacked
+```
+
+```{r}
+
+taxaabun <- ggplot(group.counts.long, aes(fill=Taxa, y=count, x=Month)) + facet_wrap(~Site) + 
+    geom_bar(position="stack", stat="identity")+  theme(legend.title = element_blank())   + scale_fill_discrete(labels = c("Abiotic", "Algae", "Dead coral", "Other invertebrates", "Seagrass", "Soft coral", "Stony coral"))  +  scale_fill_discrete(name = "Coral taxa", labels = c(~ italic("Acropora spp."), ~italic ("Isopora cuneata"), "Other taxa", ~italic("Pocillopora damicornis"), ~italic("Porites spp."), ~ italic("Seriatopora hystrix"),~italic("Stylophora pistillata")))   + labs(x = "Site", y = "Coral taxa absolute abundance")  + # axis title size +
+theme(panel.background = element_blank()) + # re label legend axis
+scale_fill_viridis(discrete = TRUE, option = "B") # COSE OPTIONS BETWEEN a-d FOR DIFF COLOURS
+barplot(1:7, col = magma(7))+
+theme(plot.title = element_text(size = 10)) + # main title 
+theme(axis.text.x = element_text(angle = 45, size = 10)) + theme(legend.text=element_text(size=10)) + theme(axis.text.y = element_text(size = 10), axis.title.x = element_text(size = 10, vjust = -0.8), axis.title.y = element_text(size = 10, vjust = 1)) 
+
+taxaabun
+```
+
+
+# stats for taxa
+```{r}
+
+fit3 <- glmmTMB(Stylophora~Site*Month, family = nbinom1, data = group.counts )
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+plot(simulateResiduals(fit3))
+
+```
+# checking for pairwise comparisons   stylo bleached
+```{r}
+stylocomps <- emmeans(fit3, ~Site)
+
+stylocomps1 <- emmeans(fit3, ~Month)
+
+stylocomps4 <- emmeans(fit3, ~Month|Site)
+
+pairs(stylocomps)
+
+pairs(stylocomps1)
+
+pairs(stylocomps4)
+```
+# stats for taxa
+```{r}
+# run a general linear model because none of my variables are independent 
+
+#fit1 <- glmmTMB(Seriatopora~Site*Month  , family = poisson, data = group.counts)
+#AIC(fit1)
+#Anova(fit1)
+#summary(fit1)
+
+fit3 <- glmmTMB(Seriatopora~Site*Month, family = nbinom1, data = group.counts )
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+sqrt.test3 <- aov(sqrt(Seriatopora)~ Site * Month, data = group.counts)
+plot(sqrt.test3)
+TukeyHSD(sqrt.test3)
+AIC(sqrt.test3)
+#fit2 <- glmmTMB(Dead~Site*Month + (1|Transect) , family = nbinom2, data = stylo.counts)
+#Anova(fit2)
+
+#fit3 <- glmmTMB(Dead~Site*Month + (1|Transect), family = poisson, data = stylo.counts)
+#Anova(fit3)
+#summary(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = UNstatus.counts.bleached)
+#Anova(fit4)
+#summary(fit4)
+
+#fit5 <- glmmTMB(Healthy~Month*Transect, family = poisson, data = UNstatus.counts.Healthy)
+#Anova(fit5)
+#summary(fit5)
+#plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit4))
+plot(simulateResiduals(sqrt.test3))
+plot(simulateResiduals(fit3))
+# fit 1 - nbinom1 is the best fit 
+```
+# checking for pairwise comparisons   stylo bleached
+```{r}
+sericomps <- emmeans(sqrt.test3, ~Site)
+
+sericomps1 <- emmeans(sqrt.test3, ~Month)
+
+sericomps4 <- emmeans(sqrt.test3, ~Month|Site)
+
+pairs(sericomps)
+
+pairs(sericomps1)
+
+pairs(sericomps4)
+```
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1 <- glmmTMB(Porites~Site*Month  , family = poisson, data = group.counts)
+
+Anova(fit1)
+summary(fit1)
+
+fit3 <- glmmTMB(Porites~Site*Month, family = nbinom1, data = group.counts )
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+#sqrt.test3 <- aov(sqrt(Porites)~ Site * Month, data = group.counts)
+#plot(sqrt.test3)
+#TukeyHSD(sqrt.test3)
+#fit2 <- glmmTMB(Dead~Site*Month + (1|Transect) , family = nbinom2, data = stylo.counts)
+#Anova(fit2)
+
+#fit3 <- glmmTMB(Dead~Site*Month + (1|Transect), family = poisson, data = stylo.counts)
+#Anova(fit3)
+#summary(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = UNstatus.counts.bleached)
+#Anova(fit4)
+#summary(fit4)
+
+#fit5 <- glmmTMB(Healthy~Month*Transect, family = poisson, data = UNstatus.counts.Healthy)
+#Anova(fit5)
+#summary(fit5)
+plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit4))
+#plot(simulateResiduals(sqrt.test3))
+plot(simulateResiduals(fit3))
+# fit 1 - nbinom1 is the best fit 
+```
+```{r}
+porcomps <- emmeans(fit3, ~Site)
+
+porcomps1 <- emmeans(fit3, ~Month)
+
+porcomps4 <- emmeans(fit3, ~Month|Site)
+
+pairs(porcomps)
+
+pairs(porcomps1)
+
+pairs(porcomps4)
+```
+```{r}
+# run a general linear model because none of my variables are independent 
+
+#fit1 <- glmmTMB(Pocillopora~Site*Month  , family = poisson, data = group.counts)
+
+#Anova(fit1)
+#summary(fit1)
+
+fit3 <- glmmTMB(Pocillopora~Site*Month+(1|Transect), family = nbinom1, data = group.counts )
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+#sqrt.test3 <- aov(sqrt(Pocillopora)~ Site * Month, data = group.counts)
+#plot(sqrt.test3)
+#TukeyHSD(sqrt.test3)
+#fit2 <- glmmTMB(Dead~Site*Month + (1|Transect) , family = nbinom2, data = stylo.counts)
+#Anova(fit2)
+
+#fit3 <- glmmTMB(Dead~Site*Month + (1|Transect), family = poisson, data = stylo.counts)
+#Anova(fit3)
+#summary(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = UNstatus.counts.bleached)
+#Anova(fit4)
+#summary(fit4)
+
+#fit5 <- glmmTMB(Healthy~Month*Transect, family = poisson, data = UNstatus.counts.Healthy)
+#Anova(fit5)
+#summary(fit5)
+#plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit4))
+#plot(simulateResiduals(sqrt.test3))
+plot(simulateResiduals(fit3))
+# fit 1 - nbinom1 is the best fit 
+```
+```{r}
+poccomps <- emmeans(fit3, ~Site)
+
+poccomps1 <- emmeans(fit3, ~Month)
+
+poccomps4 <- emmeans(fit3, ~Month|Site)
+
+pairs(poccomps)
+
+pairs(poccomps1)
+
+pairs(poccomps4)
+```
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1 <- glmmTMB(Isopora~Site*Month +(1|Transect)  , family = poisson, data = group.counts)
+
+Anova(fit1)
+summary(fit1)
+
+#fit3 <- glmmTMB(Isopora~Site*Month +(1|Transect), family = nbinom1, data = group.counts )
+#Anova(fit3)
+#summary(fit3)
+#AIC(fit3)
+
+#sqrt.test3 <- aov(sqrt(Isopora)~ Site * Month, data = group.counts)
+#plot(sqrt.test3)
+#TukeyHSD(sqrt.test3)
+#fit2 <- glmmTMB(Dead~Site*Month + (1|Transect) , family = nbinom2, data = stylo.counts)
+#Anova(fit2)
+
+#fit3 <- glmmTMB(Dead~Site*Month + (1|Transect), family = poisson, data = stylo.counts)
+#Anova(fit3)
+#summary(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = UNstatus.counts.bleached)
+#Anova(fit4)
+#summary(fit4)
+
+#fit5 <- glmmTMB(Healthy~Month*Transect, family = poisson, data = UNstatus.counts.Healthy)
+#Anova(fit5)
+#summary(fit5)
+plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit4))
+#plot(simulateResiduals(sqrt.test3))
+#plot(simulateResiduals(fit3))
+# fit 1 - nbinom1 is the best fit 
+```
+```{r}
+isocomps <- emmeans(fit1, ~Site)
+
+isocomps1 <- emmeans(fit1, ~Month)
+
+isocomps4 <- emmeans(fit1, ~Month|Site)
+
+pairs(isocomps)
+
+pairs(isocomps1)
+
+pairs(isocomps4)
+```
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1 <- glmmTMB(Acropora~Site*Month  , family = poisson, data = group.counts)
+AIC(fit1)
+Anova(fit1)
+summary(fit1)
+
+fit3 <- glmmTMB(Acropora~Site*Month, family = nbinom1, data = group.counts )
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+sqrt.test3 <- aov(sqrt(Acropora)~ Site * Month, data = group.counts)
+plot(sqrt.test3)
+TukeyHSD(sqrt.test3)
+AIC(sqrt.test3)
+#fit2 <- glmmTMB(Dead~Site*Month + (1|Transect) , family = nbinom2, data = stylo.counts)
+#Anova(fit2)
+
+#fit3 <- glmmTMB(Dead~Site*Month + (1|Transect), family = poisson, data = stylo.counts)
+#Anova(fit3)
+#summary(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = UNstatus.counts.bleached)
+#Anova(fit4)
+#summary(fit4)
+
+#fit5 <- glmmTMB(Healthy~Month*Transect, family = poisson, data = UNstatus.counts.Healthy)
+#Anova(fit5)
+#summary(fit5)
+plot(simulateResiduals(fit1))
+plot(simulateResiduals(fit3))
+plot(simulateResiduals(sqrt.test3))
+
+# fit 1 - nbinom1 is the best fit 
+```
+```{r}
+acrocomps <- emmeans(sqrt.test3, ~Site)
+
+acrocomps1 <- emmeans(sqrt.test3, ~Month)
+
+acrocomps4 <- emmeans(sqrt.test3, ~Month|Site)
+
+pairs(acrocomps)
+
+pairs(acrocomps1)
+
+pairs(acrocomps4)
+```
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1 <- glmmTMB(Other~Site*Month  , family = poisson, data = group.counts)
+AIC(fit1)
+Anova(fit1)
+summary(fit1)
+
+fit3 <- glmmTMB(Other~Site*Month, family = nbinom1, data = group.counts )
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+sqrt.test3 <- aov(sqrt(Other)~ Site * Month, data = group.counts)
+plot(sqrt.test3)
+TukeyHSD(sqrt.test3)
+AIC(sqrt.test3)
+#fit2 <- glmmTMB(Dead~Site*Month + (1|Transect) , family = nbinom2, data = stylo.counts)
+#Anova(fit2)
+
+#fit3 <- glmmTMB(Dead~Site*Month + (1|Transect), family = poisson, data = stylo.counts)
+#Anova(fit3)
+#summary(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = UNstatus.counts.bleached)
+#Anova(fit4)
+#summary(fit4)
+
+#fit5 <- glmmTMB(Healthy~Month*Transect, family = poisson, data = UNstatus.counts.Healthy)
+#Anova(fit5)
+#summary(fit5)
+plot(simulateResiduals(fit1))
+plot(simulateResiduals(fit3))
+plot(simulateResiduals(sqrt.test3))
+#plot(simulateResiduals(fit3))
+# fit 1 - nbinom1 is the best fit 
+```
+
+```{r}
+othercomps <- emmeans(fit3, ~Site)
+
+othercomps1 <- emmeans(fit3, ~Month)
+
+othercomps4 <- emmeans(fit3, ~Month|Site)
+
+pairs(othercomps)
+
+pairs(othercomps1)
+
+pairs(othercomps4)
+```
+
+
+# Statistics between relative abundance of coral taxa 
+
+```{r}
+
+taxaabun <- ggplot(group.counts.long, aes(fill=Taxa, y=count, x=Month)) + facet_wrap(~Site) + 
+    geom_bar(position="stack", stat="identity")+  theme(legend.title = element_blank())   + scale_fill_discrete(labels = c("Abiotic", "Algae", "Dead coral", "Other invertebrates", "Seagrass", "Soft coral", "Stony coral"))  +  scale_fill_discrete(name = "Coral taxa", labels = c(~ italic("Acropora spp."), ~italic ("Isopora cuneata"), "Other taxa", ~italic("Pocillopora damicornis"), ~italic("Porites spp."), ~ italic("Seriatopora hystrix"),~italic("Stylophora pistillata")))   + labs(x = "Site", y = "Coral taxa absolute abundance")  + # axis title size +
+theme(panel.background = element_blank()) + # re label legend axis
+scale_fill_viridis(discrete = TRUE, option = "B") # COSE OPTIONS BETWEEN a-d FOR DIFF COLOURS
+barplot(1:7, col = magma(7))+
+theme(plot.title = element_text(size = 10)) + # main title 
+theme(axis.text.x = element_text(angle = 45, size = 10)) + theme(legend.text=element_text(size=10)) + theme(axis.text.y = element_text(size = 10), axis.title.x = element_text(size = 10, vjust = -0.8), axis.title.y = element_text(size = 10, vjust = 1)) 
+
+taxaabun
+```
+
+
+# stats for taxa
+```{r}
+
+fit3 <- glmmTMB(Stylophora~Site*Month, family = nbinom1, data = group.percent )
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+plot(simulateResiduals(fit3))
+
+```
+# checking for pairwise comparisons   stylo bleached
+```{r}
+stylocomps <- emmeans(fit3, ~Site)
+
+stylocomps1 <- emmeans(fit3, ~Month)
+
+stylocomps4 <- emmeans(fit3, ~Month|Site)
+
+pairs(stylocomps)
+
+pairs(stylocomps1)
+
+pairs(stylocomps4)
+```
+# stats for taxa
+```{r}
+# run a general linear model because none of my variables are independent 
+
+#fit1 <- glmmTMB(Seriatopora~Site*Month  , family = poisson, data = group.percent)
+#AIC(fit1)
+#Anova(fit1)
+#summary(fit1)
+
+fit3 <- glmmTMB(Seriatopora~Site*Month, family = nbinom1, data = percent )
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+sqrt.test3 <- aov(sqrt(Seriatopora)~ Site * Month, data = percent)
+plot(sqrt.test3)
+TukeyHSD(sqrt.test3)
+AIC(sqrt.test3)
+#fit2 <- glmmTMB(Dead~Site*Month + (1|Transect) , family = nbinom2, data = stylo.counts)
+#Anova(fit2)
+
+#fit3 <- glmmTMB(Dead~Site*Month + (1|Transect), family = poisson, data = stylo.counts)
+#Anova(fit3)
+#summary(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = UNstatus.counts.bleached)
+#Anova(fit4)
+#summary(fit4)
+
+#fit5 <- glmmTMB(Healthy~Month*Transect, family = poisson, data = UNstatus.counts.Healthy)
+#Anova(fit5)
+#summary(fit5)
+#plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit4))
+plot(simulateResiduals(sqrt.test3))
+plot(simulateResiduals(fit3))
+# fit 1 - nbinom1 is the best fit 
+```
+# checking for pairwise comparisons   stylo bleached
+```{r}
+sericomps <- emmeans(sqrt.test3, ~Site)
+
+sericomps1 <- emmeans(sqrt.test3, ~Month)
+
+sericomps4 <- emmeans(sqrt.test3, ~Month|Site)
+
+pairs(sericomps)
+
+pairs(sericomps1)
+
+pairs(sericomps4)
+```
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1 <- glmmTMB(Porites~Site*Month  , family = poisson, data = group.counts)
+
+Anova(fit1)
+summary(fit1)
+
+fit3 <- glmmTMB(Porites~Site*Month, family = nbinom1, data = group.counts )
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+#sqrt.test3 <- aov(sqrt(Porites)~ Site * Month, data = group.counts)
+#plot(sqrt.test3)
+#TukeyHSD(sqrt.test3)
+#fit2 <- glmmTMB(Dead~Site*Month + (1|Transect) , family = nbinom2, data = stylo.counts)
+#Anova(fit2)
+
+#fit3 <- glmmTMB(Dead~Site*Month + (1|Transect), family = poisson, data = stylo.counts)
+#Anova(fit3)
+#summary(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = UNstatus.counts.bleached)
+#Anova(fit4)
+#summary(fit4)
+
+#fit5 <- glmmTMB(Healthy~Month*Transect, family = poisson, data = UNstatus.counts.Healthy)
+#Anova(fit5)
+#summary(fit5)
+plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit4))
+#plot(simulateResiduals(sqrt.test3))
+plot(simulateResiduals(fit3))
+# fit 1 - nbinom1 is the best fit 
+```
+```{r}
+porcomps <- emmeans(fit3, ~Site)
+
+porcomps1 <- emmeans(fit3, ~Month)
+
+porcomps4 <- emmeans(fit3, ~Month|Site)
+
+pairs(porcomps)
+
+pairs(porcomps1)
+
+pairs(porcomps4)
+```
+```{r}
+# run a general linear model because none of my variables are independent 
+
+#fit1 <- glmmTMB(Pocillopora~Site*Month  , family = poisson, data = group.counts)
+
+#Anova(fit1)
+#summary(fit1)
+
+fit3 <- glmmTMB(Pocillopora~Site*Month+(1|Transect), family = nbinom1, data = group.counts )
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+#sqrt.test3 <- aov(sqrt(Pocillopora)~ Site * Month, data = group.counts)
+#plot(sqrt.test3)
+#TukeyHSD(sqrt.test3)
+#fit2 <- glmmTMB(Dead~Site*Month + (1|Transect) , family = nbinom2, data = stylo.counts)
+#Anova(fit2)
+
+#fit3 <- glmmTMB(Dead~Site*Month + (1|Transect), family = poisson, data = stylo.counts)
+#Anova(fit3)
+#summary(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = UNstatus.counts.bleached)
+#Anova(fit4)
+#summary(fit4)
+
+#fit5 <- glmmTMB(Healthy~Month*Transect, family = poisson, data = UNstatus.counts.Healthy)
+#Anova(fit5)
+#summary(fit5)
+#plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit4))
+#plot(simulateResiduals(sqrt.test3))
+plot(simulateResiduals(fit3))
+# fit 1 - nbinom1 is the best fit 
+```
+```{r}
+poccomps <- emmeans(fit3, ~Site)
+
+poccomps1 <- emmeans(fit3, ~Month)
+
+poccomps4 <- emmeans(fit3, ~Month|Site)
+
+pairs(poccomps)
+
+pairs(poccomps1)
+
+pairs(poccomps4)
+```
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1 <- glmmTMB(Isopora~Site*Month +(1|Transect)  , family = poisson, data = group.counts)
+
+Anova(fit1)
+summary(fit1)
+
+#fit3 <- glmmTMB(Isopora~Site*Month +(1|Transect), family = nbinom1, data = group.counts )
+#Anova(fit3)
+#summary(fit3)
+#AIC(fit3)
+
+#sqrt.test3 <- aov(sqrt(Isopora)~ Site * Month, data = group.counts)
+#plot(sqrt.test3)
+#TukeyHSD(sqrt.test3)
+#fit2 <- glmmTMB(Dead~Site*Month + (1|Transect) , family = nbinom2, data = stylo.counts)
+#Anova(fit2)
+
+#fit3 <- glmmTMB(Dead~Site*Month + (1|Transect), family = poisson, data = stylo.counts)
+#Anova(fit3)
+#summary(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = UNstatus.counts.bleached)
+#Anova(fit4)
+#summary(fit4)
+
+#fit5 <- glmmTMB(Healthy~Month*Transect, family = poisson, data = UNstatus.counts.Healthy)
+#Anova(fit5)
+#summary(fit5)
+plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit4))
+#plot(simulateResiduals(sqrt.test3))
+#plot(simulateResiduals(fit3))
+# fit 1 - nbinom1 is the best fit 
+```
+```{r}
+isocomps <- emmeans(fit1, ~Site)
+
+isocomps1 <- emmeans(fit1, ~Month)
+
+isocomps4 <- emmeans(fit1, ~Month|Site)
+
+pairs(isocomps)
+
+pairs(isocomps1)
+
+pairs(isocomps4)
+```
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1 <- glmmTMB(Acropora~Site*Month  , family = poisson, data = group.counts)
+AIC(fit1)
+Anova(fit1)
+summary(fit1)
+
+fit3 <- glmmTMB(Acropora~Site*Month, family = nbinom1, data = group.counts )
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+sqrt.test3 <- aov(sqrt(Acropora)~ Site * Month, data = group.counts)
+plot(sqrt.test3)
+TukeyHSD(sqrt.test3)
+AIC(sqrt.test3)
+#fit2 <- glmmTMB(Dead~Site*Month + (1|Transect) , family = nbinom2, data = stylo.counts)
+#Anova(fit2)
+
+#fit3 <- glmmTMB(Dead~Site*Month + (1|Transect), family = poisson, data = stylo.counts)
+#Anova(fit3)
+#summary(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = UNstatus.counts.bleached)
+#Anova(fit4)
+#summary(fit4)
+
+#fit5 <- glmmTMB(Healthy~Month*Transect, family = poisson, data = UNstatus.counts.Healthy)
+#Anova(fit5)
+#summary(fit5)
+plot(simulateResiduals(fit1))
+plot(simulateResiduals(fit3))
+plot(simulateResiduals(sqrt.test3))
+
+# fit 1 - nbinom1 is the best fit 
+```
+```{r}
+acrocomps <- emmeans(sqrt.test3, ~Site)
+
+acrocomps1 <- emmeans(sqrt.test3, ~Month)
+
+acrocomps4 <- emmeans(sqrt.test3, ~Month|Site)
+
+pairs(acrocomps)
+
+pairs(acrocomps1)
+
+pairs(acrocomps4)
+```
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1 <- glmmTMB(Other~Site*Month  , family = poisson, data = group.counts)
+AIC(fit1)
+Anova(fit1)
+summary(fit1)
+
+fit3 <- glmmTMB(Other~Site*Month, family = nbinom1, data = group.counts )
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+sqrt.test3 <- aov(sqrt(Other)~ Site * Month, data = group.counts)
+plot(sqrt.test3)
+TukeyHSD(sqrt.test3)
+AIC(sqrt.test3)
+#fit2 <- glmmTMB(Dead~Site*Month + (1|Transect) , family = nbinom2, data = stylo.counts)
+#Anova(fit2)
+
+#fit3 <- glmmTMB(Dead~Site*Month + (1|Transect), family = poisson, data = stylo.counts)
+#Anova(fit3)
+#summary(fit3)
+
+#fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = UNstatus.counts.bleached)
+#Anova(fit4)
+#summary(fit4)
+
+#fit5 <- glmmTMB(Healthy~Month*Transect, family = poisson, data = UNstatus.counts.Healthy)
+#Anova(fit5)
+#summary(fit5)
+plot(simulateResiduals(fit1))
+plot(simulateResiduals(fit3))
+plot(simulateResiduals(sqrt.test3))
+#plot(simulateResiduals(fit3))
+# fit 1 - nbinom1 is the best fit 
+```
+
+```{r}
+othercomps <- emmeans(fit3, ~Site)
+
+othercomps1 <- emmeans(fit3, ~Month)
+
+othercomps4 <- emmeans(fit3, ~Month|Site)
+
+pairs(othercomps)
+
+pairs(othercomps1)
+
+pairs(othercomps4)
+```
+
+
+
+
+
+
+```{r}
+# run a general linear model because none of my variables are independent 
+
+fit1<- glmmTMB(Bleached~Site*Month , family = nbinom1, data = B.percent)
+fit1
+Anova(fit1)
+summary(fit1)
+AIC(fit1)
+
+fit2 <- glmmTMB(Bleached~Site*Month , family = nbinom2, data = B.percent)
+Anova(fit2)
+summary(fit2)
+AIC(fit2)
+
+fit3 <- glmmTMB(Bleached~Site*Month + (1|Transect), family = poisson, data = B.percent)
+Anova(fit3)
+summary(fit3)
+AIC(fit3)
+
+fit4 <- glmmTMB(Bleached~Site*Month, family = poisson, data = B.percent)
+Anova(fit4)
+summary(fit4)
+AIC(fit4)
+
+plot(simulateResiduals(fit1))
+plot(simulateResiduals(fit2))
+plot(simulateResiduals(fit3))
+plot(simulateResiduals(fit4))
+
+# fit 1 - is the best fit 
+```
+
+
+```{R}
+b <- ggplot(group.percent.sum, aes(x =Taxa , y = mean, fill= Month))
+b <- b + geom_bar(position = "dodge", stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9)) + facet_wrap(~ Site )
+b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90))
+b <- b + scale_fill_manual("legend", values = c("T0" = "black", "T1" = "grey", "T2" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + labs(title = "Hard coral Taxa abundance") + ylab("Coral colony (%)") + xlab("Coral taxa")
+
+b
+```
+
+# Seriatopora abudnance
+```{r}
+# bar plots 
+
+seri.counts <- ddply(DISEASE.NODEAD.seri, c("Site", "Month", "Transect", "Taxa"), summarise,  Healthy= sum(UNstatus== "Healthy"), Bleached = sum(UNstatus== "Bleached"), Other=sum(UNstatus== "Other"), Dead = sum(UNstatus== "Dead"))
+
+seri.counts
+seri.counts.long <- gather(seri.counts, UNstatus, count, Healthy, Bleached, Other, Dead)
+seri.counts.long$UNstatus <- as.factor(seri.counts.long$UNstatus)
+seri.counts.long
+# use ddply to get %
+
+seri.percent <- ddply(ECO.seri, c( "Site", "Month", "Transect" , "Taxa" ), summarise,  Healthy= sum(UNstatus== "Healthy")/ length(UNstatus) *100, Bleached = sum(UNstatus== "Bleached")/ length(UNstatus) *100, Other=sum(UNstatus== "Other")/ length(UNstatus) *100, Dead = sum(UNstatus== "Dead")/ length(UNstatus) *100)
+
+seri.percent
+# Hstatus percent
+
+seri.percent.long <- gather(seri.percent, UNstatus, seri.counts, Healthy, Bleached, Other, Dead)
+
+seri.counts.long
+
+seri.percent.sum <- ddply(seri.percent.long, c("Site","Time" ,"UNstatus","Taxa"), summarise,
+               N    = length(seri.counts),
+               mean = mean(seri.counts),
+               sd   = sd(seri.counts),
+               se   = sd / sqrt(N)
+)
+
+seri.percent.sum
+seri.percent.sum.bleached <- seri.percent.sum
+seri.percent.sum.bleached$Site <- factor(seri.percent.sum.bleached$Site,levels = c("Sylphs Hole", "North Bay", "Coral Garden")) # Site location on graph
+seri.percent.sum.bleached <- dplyr::filter(seri.percent.sum.bleached, UNstatus != "Other")
+seri.percent.sum.bleached <- dplyr::filter(seri.percent.sum.bleached, UNstatus != "Healthy")
+seri.percent.sum.bleached <- dplyr::filter(seri.percent.sum.bleached, UNstatus != "Dead")
+b <- ggplot(seri.percent.sum.bleached, aes(x = UNstatus,y = mean, fill= Time))
+b <- b + geom_bar(position = "dodge", stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9)) + facet_wrap(~ Site )
+
+b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90))
+b <- b + scale_fill_manual("legend", values = c("T0" = "white", "T1" = "white", "T2" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + labs(title = "Seriatopora % bleached and dead coral colonies over time") + ylab("Bleached Seriatopora coral colonies (%)") + xlab("Time")
+
+b
+
+```

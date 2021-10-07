@@ -1,0 +1,744 @@
+---
+title: "Lord Howe Island CPC 2019 Disease CPC"
+author: "Tess Moriarty"
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    output: html_document
+    theme: united
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width=12, fig.height=6) 
+```
+
+```{R, include = FALSE}
+# load packages adn libraries
+
+library(Hmisc)
+library(plyr)
+library(dplyr)
+library(lme4)
+library(ggplot2)
+library(car)
+library(MASS)
+#install.packages("glmmTMB", repos="https://glmmTMB.github.io/glmmTMB/repos", type="binary")
+#install.packages("TMB")
+#library(TMB)
+#install.packages("glmmTMB")
+#install.packages("glmmTMB", type="source")
+library(glmmTMB)
+library(DHARMa)
+library(multcomp)
+library(emmeans)
+library(RColorBrewer)
+library(vegan) 
+library(tidyr)
+library(tidyverse)
+#if (!requireNamespace("BiocManager", quietly = TRUE))
+#    install.packages("BiocManager")
+#BiocManager::install()
+#library("DESeq2")
+library(phyloseq)
+library(viridis)
+#install.packages("ddply")
+#library(ddply)
+
+
+```
+
+__About the data__
+# This data is from November 2018 in the Lord Howe Island lagoon at North Bay (NB), Coral Garden (CG) and Erscott's (ER). It is the output from CoralNet's Coral Point Count (CPC) data where we used 64 points per 1 m squared quadrat. There were three transects per site and 3 photo quadrats (PQ) per transect.
+
+# load photo quadrat data
+
+```{r}
+setwd("/Users/tessmoriarty/Documents/Tess_PhD/Lord Howe Island/Disease")
+PQ <- read.csv("lhi_cpc_disease_68points.csv", stringsAsFactors = FALSE, header = T, fill = TRUE)
+PQ$Site <- as.factor(PQ$Site)
+PQ$label <- as.factor(PQ$Label)
+PQ$group <- as.factor(PQ$Group)
+PQ$Taxa <- as.factor(PQ$Taxa)
+PQ$transect <- as.factor(PQ$Transect)
+PQ$Quadrat <- as.factor(PQ$Quadrat)
+PQ$Time <- as.factor(PQ$Time)
+str(PQ)
+#PQ
+```
+
+__Separate into groups__
+```{r}
+CPC.ER <- PQ[which(PQ$Site == 'Erscotts.Reef'),]
+CPC.CG <- PQ[which(PQ$Site == 'Coral.Gardens'),]
+CPC.NB <- PQ[which(PQ$Site == 'North.Bay'),]
+
+abiotic1 <- PQ[which(PQ$Group == 'abiotic'),]
+algae1 <- PQ[which(PQ$group == 'algae'),]
+other.in <- PQ[which(PQ$Group == 'other invertebrate'),]
+seagrass1 <- PQ[which(PQ$Group == 'seagrass'),]
+stonyc <- PQ[which(PQ$Group == 'stony coral'),]
+softy <- PQ[which(PQ$Group == 'soft coral'),]
+deadc <- PQ[which(PQ$Group == 'dead stony coral'),]
+
+#other.in
+```
+
+# CPC graphs for overall benthic composition at LHI
+```{r}
+group.counts <- ddply(PQ, c( "Quadrat"), summarise, abiotic =sum(group == "abiotic"), algae = sum(group == "algae"),dead.stony.coral = sum(group == "dead stony coral"), other.invertebrate =sum(group =="other invertebrate"), seagrass =sum(group == "seagrass"), soft.coral =sum(group == "soft coral"), stony.coral =sum(group == "stony coral"))
+
+group.counts.long <- gather(group.counts, group, count, abiotic:stony.coral)
+group.counts.long$group <- as.factor(group.counts.long$group)
+#group.counts.long
+# use ddply to get %
+
+group.percent <- ddply(PQ, c( "Quadrat"), summarise, abiotic =sum(group == "abiotic")/length(group)*100, algae = sum(group == "algae")/length(group)*100, dead.stony.coral = sum(group == "dead stony coral")/length(group)*100, other.invertebrate =sum(group == "other invertebrate")/length(group)*100, seagrass =sum(group == "seagrass")/length(group)*100, soft.coral =sum(group == "soft coral")/length(group)*100, stony.coral =sum(group == "stony coral")/length(group)*100)
+
+# group percent
+
+group.percent.long <- gather(group.percent, group, percent.cover, abiotic:stony.coral)
+
+
+#  Run the functions length, mean, and sd on the value of benthic composition % with standard erros for each group,
+
+group.percent.sum <- ddply(group.percent.long, c( "group"), summarise,
+               N    = length(percent.cover),
+               mean = mean(percent.cover),
+               sd   = sd(percent.cover),
+               se   = sd / sqrt(N)
+)
+group.percent.sum
+
+```
+
+__Overall LHI benthic groups percent cover__ 
+```{r}
+
+b <- ggplot(group.percent.sum, aes(x = group,y = mean, fill= group))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("March" = "black", "April/May" = "grey", "October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 50)) + labs(title = "Healthy and UN corals by site and time") + ylab("Benthic composition (%)") 
+b <- b + theme_classic()
+b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.title.x = element_text(angle=0, size=50, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=50, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=50)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90))
+b <- b + theme(strip.text.x = element_text(size = 50, face = "bold")) # text size of facet label titles
+
+
+```
+```{r}
+library(glmmTMB)
+fit1 <- glmmTMB(percent.cover~group + (1|Quadrat) , family = nbinom1, data = group.percent.long)
+
+Anova(fit1)
+summary(fit1)
+AIC(fit1)
+
+groupcomps1 <- emmeans(fit1, ~group)
+
+pairs(groupcomps1)
+
+```
+
+# by site
+```{r}
+q <- ggplot(PQ, aes(x = group, fill= Site))
+q <- q + geom_bar(aes(y = (..count../sum(..count..))), position = "dodge")
+q <- q + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + labs(title = "Percent cover of group by site")+ scale_y_continuous()
+
+```
+# Site and time
+```{r}
+group.counts <- ddply(PQ, c("Site", "Quadrat"), summarise, abiotic =sum(group == "abiotic"), alage = sum(group == "algae"), dead.stony.coral = sum(group == "dead stony coral"), other.invertebrate = sum(group == "other invertebrate"), seagrass =sum(group == "seagrass"), soft.coral =sum(group == "soft coral"), stony.coral =sum(group == "stony coral"))
+
+group.counts.long <- gather(group.counts, group, count, abiotic:stony.coral)
+group.counts.long$group <- as.factor(group.counts.long$group)
+
+# use ddply to get %
+
+group.percent <- ddply(PQ, c("Site",  "Quadrat"), summarise, abiotic =sum(group == "abiotic")/length(group)*100, algae = sum(group == "algae")/length(group)*100, dead.stony.coral = sum(group == "dead stony coral")/length(group)*100,  other.invertebrate =sum(group == "other invertebrate")/length(group)*100, seagrass =sum(group == "seagrass")/length(group)*100, soft.coral =sum(group == "soft coral")/length(group)*100, stony.coral =sum(group == "stony coral")/length(group)*100)
+
+# group percent
+
+group.percent.long <- gather(group.percent, group, percent.cover, abiotic:stony.coral)
+
+#  Run the functions length, mean, and sd on the value of "zooxprot" for each group,
+#  broken down by site + Time
+group.percent.sum <- ddply(group.percent.long, c("Site",  "group"), summarise,
+               N    = length(percent.cover),
+               mean = mean(percent.cover),
+               sd   = sd(percent.cover),
+               se   = sd / sqrt(N)
+)
+group.percent.sum
+```
+__Benthic composition of groups per site__
+```{r}
+#It gives # of obs, mean, standard deviation, and standard error. 
+c <- ggplot(group.percent.sum, aes(x = group,y = mean, fill= group))
+c <- c + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+c <- c + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+#c <- c + scale_fill_manual("legend", values = c("March" = "black", "April/May" = "grey", "October" = "white"))
+c <- c + theme(axis.text.x = element_text(angle = 90)) + ylab("Benthic composition (%)")
+#c <- c + theme_classic()
+#c <- c  + theme(axis.text.x=element_text(angle=90, size=60, vjust=2.5))
+c <- c  + theme(axis.text.y=element_text(angle=0, size=60, vjust=2.5))
+c <- c  + theme(axis.title.x = element_text(angle=0, size=60, vjust=2.5, face = "bold"))
+c <- c  + theme(axis.title.y=element_text(angle=90, size=60, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+c <- c  +  theme(legend.text=element_text(size=40)) +  theme(legend.title=element_blank())
+c <- c + facet_wrap(~Site)
+c <- c + theme(axis.text.x = element_text(angle = 90))
+c <- c + theme(strip.text.x = element_text(size = 30, face = "bold")) # text size of facet label titles
+
+```
+__Benthic composition of groups per site stacked graph grey scale__
+```{r}
+
+benthicstacked <- ggplot(group.percent.sum, aes(fill=group, y=mean, x=Site))  + 
+    geom_bar(position="fill", stat="identity")  +   theme(strip.text.x = element_text(size = 55, face = "bold", angle = 25, hjust = 0.8)) +   theme(strip.text.y  = element_text(size =55, face = "bold"))  + labs(x = "Site", y = "Benthic composition (%)") +  theme(axis.title = element_text(size = 55)) + # axis title size
+  theme(plot.title = element_text(size = 45)) + # main title 
+  scale_fill_grey() + theme(axis.text.x = element_text(angle = 0, size = 55)) + theme(legend.text=element_text(size=60)) + theme(axis.text.y = element_text(size = 65), axis.title.x = element_text(size = 65, vjust = -0.8, face = "bold"), axis.title.y = element_text(size = 80, face = "bold", vjust = 1)) + coord_fixed(ratio = 2) + theme(legend.title = element_blank())  + scale_fill_discrete(labels = c("Abiotic", "Algae", "Dead coral", "Other invertebrates", "Seagrass", "Soft coral", "Stony coral")) + scale_fill_manual(values = c("black", "gray15", "gray30", "gray45", "gray60", "gray75", "gray90")) + theme(panel.background = element_blank())  # re label legend axis
+
+#benthicstacked
+```
+# colored stacked benthic composition graph
+
+```{r}
+benthicstacked <- ggplot(group.percent.sum, aes(fill=group, y=mean, x=Site)) +  coord_flip() + 
+    geom_bar(position="fill", stat="identity")  + scale_fill_discrete(labels = c("Abiotic", "Algae", "Dead coral", "Other invertebrates", "Seagrass", "Soft coral", "Stony coral")) +   theme(strip.text.x = element_text(size = 0, face = "bold", angle = 15, hjust = 0.8)) +   theme(axis.text.y  = element_text(size =15, face = "bold"))  + labs(x = "Site", y = "Benthic composition (%)") +  theme(axis.title = element_text(size = 15)) + # axis title size +
+theme(panel.background = element_blank()) + # re label legend axis
+scale_fill_viridis(discrete = TRUE, option = "B") # COSE OPTIONS BETWEEN a-d FOR DIFF COLOURS
+barplot(1:7, col = magma(7))+
+theme(plot.title = element_text(size = 15)) + # main title 
+theme(axis.text.x = element_text(angle = 0, size = 15)) + theme(legend.text=element_text(size=10)) + theme(axis.text.y = element_text(size = 15), axis.title.x = element_text(size = 15, vjust = -0.8, face = "bold"), axis.title.y = element_text(size = 10, face = "bold", vjust = 1)) + coord_fixed(ratio = 2) + theme(legend.title = element_blank()) 
+
+benthicstacked
+```
+
+# analysis 
+```{r}
+
+fit1allben <- glmmTMB(percent.cover ~ group*Site , family = poisson, data = group.percent.long)
+Anova(fit1allben)
+plot(simulateResiduals(fit1allben))
+AIC(fit1allben)
+
+
+comps <- emmeans(fit1allben, ~Site)
+#comps2 <- emmeans(fit1allben, ~Time)
+comps3 <- emmeans(fit1allben, ~group)
+
+pairs(comps)
+#pairs(comps2)
+pairs(comps3)
+
+```
+
+```{r}
+
+# run a general linear model because none of my variables are independent 
+
+fit1 <- glmmTMB(percent.cover~Site*group + (1|Quadrat) , family = nbinom1, data = group.percent.long)
+
+Anova(fit1)
+summary(fit1)
+AIC(fit1)
+
+#fit2 <- glmmTMB(percent.cover~Site*group + (1|transect) , family = nbinom2, data = group.percent.long)
+#Anova(fit2)
+#AIC(fit2)
+
+#fit3 <- glmmTMB(percent.cover~Site*group + (1|transect), family = poisson, data = group.percent.long)
+#Anova(fit3)
+#summary(fit3)
+#AIC(fit3)
+
+#fit4 <- glmmTMB(percent.cover~Site*group, family = poisson, data = group.percent.long)
+#Anova(fit4)
+#summary(fit4)
+#AIC(fit4)
+
+#fit5 <- glmmTMB(percent.cover~Site*group, family = poisson, data = group.percent.long)
+#Anova(fit5)
+#summary(fit5)
+#AIC(fit5)
+
+plot(simulateResiduals(fit1))
+#plot(simulateResiduals(fit2))
+#plot(simulateResiduals(fit3))
+#plot(simulateResiduals(fit4))
+#plot(simulateResiduals(fit5))
+# fit 1 - nbinoml is the best fit 
+
+```
+```{r}
+groupcomps <- emmeans(fit1, ~Site)
+
+groupcomps1 <- emmeans(fit1, ~group)
+
+groupcomps2 <- emmeans(fit1, ~Site|group)
+
+groupcomps4 <- emmeans(fit1, ~group|Site)
+
+pairs(groupcomps)
+
+pairs(groupcomps1)
+
+pairs(groupcomps2)
+
+pairs(groupcomps4)
+```
+# CPC graphs for overall benthic composition at LHI using the labels 
+```{r}
+label.counts <- ddply(PQ, c( "Quadrat"),  summarise, stony.coral = sum(label == "stony coral"),   ascidian =sum(label == "ascidian"),  CCA =sum(label == "CCA"), Cypha =sum(label == "Cypha"), D_coral =sum(label == "D_coral"), DeadAlg =sum(label == "DeadAlg"), Macro =sum(label == "Macro"),    Rock =sum(label == "Rock"), Rubble =sum(label == "Rubble"), Sand =sum(label == "Sand"), Seagrass =sum(label == "Seagrass"))
+
+label.counts.long <- gather(label.counts, label, count, stony.coral:Seagrass)
+label.counts.long$label <- as.factor(label.counts.long$label)
+#label.counts.long
+# use ddply to get %
+
+label.percent <- ddply(PQ, c( "Quadrat"), summarise, stony.coral = sum(label == "stony coral")/length(label)*100,  ascidian =sum(label == "ascidian")/length(label)*100,  CCA =sum(label == "CCA")/length(label)*100,   D_coral =sum(label == "D_coral")/length(label)*100, DeadAlg =sum(label == "DeadAlg")/length(label)*100,  Macro =sum(label == "Macro")/length(label)*100, Rock =sum(label == "Rock")/length(label)*100, Rubble =sum(label == "Rubble")/length(label)*100, Sand =sum(label == "Sand")/length(label)*100, Seagrass =sum(label == "Seagrass")/length(label)*100)
+
+# label percent
+
+label.percent.long <- gather(label.percent, label, percent.cover, stony.coral:Seagrass)
+
+
+#  Run the functions length, mean, and sd on the value of benthic composition % with standard erros for each label,
+
+label.percent.sum <- ddply(label.percent.long, c( "label"), summarise,
+               N    = length(percent.cover),
+               mean = mean(percent.cover),
+               sd   = sd(percent.cover),
+               se   = sd / sqrt(N)
+)
+#label.percent.sum
+
+```
+
+
+```{r}
+
+b <- ggplot(label.percent.sum, aes(x = label,y = mean, fill= label))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("March" = "black", "April/May" = "grey", "October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10)) + labs(title = "Healthy and UN corals by site and time") + ylab("Benthic composition (%)") 
+b <- b + theme_classic()
+b <- b  + theme(axis.text.x=element_text(angle=90, size=10, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+b <- b  + theme(axis.title.x = element_text(angle=0, size=10, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank())
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90))
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+
+#b
+```
+
+
+```{r}
+label.counts <- ddply(PQ, c( "Site", "Quadrat"),  summarise, stony.coral = sum(label == "stony coral"),    ascidian =sum(label == "ascidian"),  CCA =sum(label == "CCA"), D_coral =sum(label == "D_coral"), DeadAlg =sum(label == "DeadAlg"), Macro =sum(label == "Macro"), Rock =sum(label == "Rock"), Rubble =sum(label == "Rubble"), Sand =sum(label == "Sand"), Seagrass =sum(label == "Seagrass"))
+
+label.counts.long <- gather(label.counts, label, count, stony.coral:Seagrass)
+label.counts.long$label <- as.factor(label.counts.long$label)
+#label.counts.long
+# use ddply to get %
+
+label.percent <- ddply(PQ, c("Site", "Quadrat"), summarise, stony.coral = sum(label == "stony coral")/length(label)*100, ascidian =sum(label == "ascidian")/length(label)*100,  CCA =sum(label == "CCA")/length(label)*100, D_coral =sum(label == "D_coral")/length(label)*100, DeadAlg =sum(label == "DeadAlg")/length(label)*100,  Macro =sum(label == "Macro")/length(label)*100,  Rock =sum(label == "Rock")/length(label)*100, Rubble =sum(label == "Rubble")/length(label)*100, Sand =sum(label == "Sand")/length(label)*100, Seagrass =sum(label == "Seagrass")/length(label)*100)
+
+# label percent
+
+label.percent.long <- gather(label.percent, label, percent.cover, stony.coral:Seagrass)
+
+
+#  Run the functions length, mean, and sd on the value of benthic composition % with standard erros for each label,
+
+label.percent.sum <- ddply(label.percent.long, c("Site", "label"), summarise,
+               N    = length(percent.cover),
+               mean = mean(percent.cover),
+               sd   = sd(percent.cover),
+               se   = sd / sqrt(N)
+)
+#label.percent.sum
+
+```
+
+
+```{r}
+
+b <- ggplot(label.percent.sum, aes(x = label,y = mean, fill= label))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("March" = "black", "April/May" = "grey", "October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10)) + labs(title = "Healthy and UN corals by site and time") + ylab("Benthic composition (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+b <- b  + theme(axis.title.x = element_text(angle=0, size=10, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank()) + facet_wrap(~ Site)
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90))
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+
+#b
+```
+
+```{r}
+
+Acr_arb <- PQ[which(PQ$label == 'Acr_arb'),]
+Acr_bra <- PQ[which(PQ$label == 'Acr_bra'),]
+Acr_tab <- PQ[which(PQ$label == 'Acr_tab'),]
+Cyph <- PQ[which(PQ$label == 'Cyph'),]
+Goniopora <- PQ[which(PQ$label == 'Goniopora'),]
+Homo <- PQ[which(PQ$label == 'Homo'),]
+Isopora <- PQ[which(PQ$label == 'Isopora'),]
+Para_austr <- PQ[which(PQ$label == 'Para_austr'),]
+PocDam <- PQ[which(PQ$label == 'PocDam'),]
+Porites <- PQ[which(PQ$label == 'Porites'),]
+Seriatop <- PQ[which(PQ$label == 'Seriatop'),]
+StPis <- PQ[which(PQ$label == 'StPis'),]
+
+
+```
+```{r}
+
+HardCoral <- label.percent.sum
+
+HardCoral <- dplyr::filter(HardCoral, label != "ascidian")
+HardCoral <- dplyr::filter(HardCoral, label != "CCA")
+HardCoral <- dplyr::filter(HardCoral, label != "DeadAlg")
+HardCoral <- dplyr::filter(HardCoral, label != "Sand")
+HardCoral <- dplyr::filter(HardCoral, label != "D_coral")
+HardCoral <- dplyr::filter(HardCoral, label != "Macro")
+HardCoral <- dplyr::filter(HardCoral, label != "Rock")
+HardCoral <- dplyr::filter(HardCoral, label != "Rubble")
+HardCoral <- dplyr::filter(HardCoral, label != "Seagrass")
+
+
+b <- ggplot(HardCoral, aes(x = label,y = mean, fill= label))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("March" = "black", "April/May" = "grey", "October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 50)) + labs(title = "Healthy and UN corals by site and time") + ylab("Benthic composition (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.title.x = element_text(angle=0, size=50, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=50, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=50)) +  theme(legend.title=element_blank()) + facet_wrap(~ Site)
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90))
+b <- b + theme(strip.text.x = element_text(size = 50, face = "bold")) # text size of facet label titles
+
+#b
+```
+
+
+
+```{r}
+label.counts <- ddply(PQ, c( "Site", "Quadrat"),  summarise, Acr_arb = sum(label == "Acr_arb"), Acr_bra = sum(label == "Acr_bra"), Acr_tab =sum(label == "Acr_tab"),   ascidian =sum(label == "ascidian"),  CCA =sum(label == "CCA"), Cypha =sum(label == "Cypha"), D_coral =sum(label == "D_coral"), DeadAlg =sum(label == "DeadAlg"),Goniopora =sum(label == "Goniopora"), Isopora =sum(label == "Isopora"), Macro =sum(label == "Macro"),  Para_austr =sum(label == "Para_austr"), PocDam =sum(label == "PocDam"), Porites =sum(label == "Porites"),  Rock =sum(label == "Rock"), Rubble =sum(label == "Rubble"), Sand =sum(label == "Sand"), Seagrass =sum(label == "Seagrass"), Seriatop =sum(label == "Seriatop"),   StPis =sum(label == "StPis"))
+
+label.counts.long <- gather(label.counts, label, count, Acr_arb:StPis)
+label.counts.long$label <- as.factor(label.counts.long$label)
+#label.counts.long
+# use ddply to get %
+
+label.percent <- ddply(PQ, c("Site", "Quadrat"), summarise, Acr_arb = sum(label == "Acr_arb")/length(label)*100, Acr_bra = sum(label == "Acr_bra")/length(label)*100, Acr_tab =sum(label == "Acr_tab")/length(label)*100, ascidian =sum(label == "ascidian")/length(label)*100,  CCA =sum(label == "CCA")/length(label)*100,  Cypha =sum(label == "Cypha")/length(label)*100, D_coral =sum(label == "D_coral")/length(label)*100, DeadAlg =sum(label == "DeadAlg")/length(label)*100, Goniopora =sum(label == "Goniopora")/length(label)*100, Homo =sum(label == "Homo")/length(label)*100, Isopora =sum(label == "Isopora")/length(label)*100, Macro =sum(label == "Macro")/length(label)*100, Para_austr =sum(label == "Para_austr")/length(label)*100, PocDam =sum(label == "PocDam")/length(label)*100, Porites =sum(label == "Porites")/length(label)*100, Rock =sum(label == "Rock")/length(label)*100, Rubble =sum(label == "Rubble")/length(label)*100, Sand =sum(label == "Sand")/length(label)*100, Seagrass =sum(label == "Seagrass")/length(label)*100, Seriatop =sum(label == "Seriatop")/length(label)*100, StPis =sum(label == "StPis")/length(label)*100)
+
+# label percent
+
+label.percent.long <- gather(label.percent, label, percent.cover, Acr_arb:StPis)
+
+
+#  Run the functions length, mean, and sd on the value of benthic composition % with standard erros for each label,
+
+label.percent.sum <- ddply(label.percent.long, c("Site", "label"), summarise,
+               N    = length(percent.cover),
+               mean = mean(percent.cover),
+               sd   = sd(percent.cover),
+               se   = sd / sqrt(N)
+)
+#label.percent.sum
+
+```
+
+
+```{r}
+
+b <- ggplot(label.percent.sum, aes(x = label,y = mean, fill= label))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("March" = "black", "April/May" = "grey", "October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10)) + labs(title = "Healthy and UN corals by site and time") + ylab("Benthic composition (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+b <- b  + theme(axis.title.x = element_text(angle=0, size=10, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank()) + facet_wrap(~ Site)
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90))
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet label titles
+
+b
+```
+# Site and time Taxa
+```{r}
+Taxa.counts <- ddply(PQ, c("Site", "Quadrat"), summarise, ascidian =sum(Taxa == "ascidian"), CCA = sum(Taxa == "CCA"), D_coral = sum(Taxa == "D_coral"), DeadAlg = sum(Taxa == "DeadAlg"), Macro =sum(Taxa == "Macro"), Soft =sum(Taxa == "Soft"), Rock =sum(Taxa == "Rock"), Rubble =sum(Taxa == "Rubble"), Sand =sum(Taxa == "Sand"), Seagrass =sum(Taxa == "Seagrass"),  Acr_arb =sum(Taxa == "Acr_arb"), Acr_bra =sum(Taxa == "Acr_bra"), Acr_tab =sum(Taxa == "Acr_tab"), Cypha =sum(Taxa == "Cypha"), Goniopora =sum(Taxa == "Goniopora"), Isopora =sum(Taxa == "Isopora"), Para_austr =sum(Taxa == "Para_austr"), PocDam =sum(Taxa == "PocDam"), Porites =sum(Taxa == "Porites"), Seriatop =sum(Taxa == "Seriatop"), StPis =sum(Taxa == "StPis"))
+
+Taxa.counts
+Taxa.counts.long <- gather(Taxa.counts, Taxa, count, ascidian:StPis)
+Taxa.counts.long$Taxa <- as.factor(Taxa.counts.long$Taxa)
+
+# use ddply to get %
+
+Taxa.percent <- ddply(PQ, c("Site",  "Quadrat"), summarise, ascidian =sum(Taxa == "ascidian")/length(Taxa)*100, CCA = sum(Taxa == "CCA")/length(Taxa)*100, D_coral = sum(Taxa == "D_coral")/length(Taxa)*100, DeadAlg = sum(Taxa == "DeadAlg")/length(Taxa)*100, Macro =sum(Taxa == "Macro")/length(Taxa)*100, Soft =sum(Taxa == "Soft")/length(Taxa)*100, Rock =sum(Taxa == "Rock")/length(Taxa)*100, Rubble =sum(Taxa == "Rubble")/length(Taxa)*100, Sand =sum(Taxa == "Sand")/length(Taxa)*100, Seagrass =sum(Taxa == "Seagrass")/length(Taxa)*100, Acr_arb =sum(Taxa == "Acr_arb")/length(Taxa)*100, Acr_bra =sum(Taxa == "Acr_bra")/length(Taxa)*100, Acr_tab =sum(Taxa == "Acr_tab")/length(Taxa)*100, Cypha =sum(Taxa == "Cypha")/length(Taxa)*100, Goniopora =sum(Taxa == "Goniopora")/length(Taxa)*100, Isopora =sum(Taxa == "Isopora")/length(Taxa)*100, Para_austr =sum(Taxa == "Para_austr")/length(Taxa)*100, PocDam =sum(Taxa == "PocDam")/length(Taxa)*100, Porites =sum(Taxa == "Porites")/length(Taxa)*100, Seriatop =sum(Taxa == "Seriatop")/length(Taxa)*100, StPis =sum(Taxa == "StPis")/length(Taxa)*100)
+
+# Taxa percent
+
+Taxa.percent.long <- gather(Taxa.percent, Taxa, percent.cover, ascidian:StPis)
+
+#  Run the functions length, mean, and sd on the value of "zooxprot" for each Taxa,
+#  broken down by site + Time
+Taxa.percent.sum <- ddply(Taxa.percent.long, c("Site",  "Taxa"), summarise,
+               N    = length(percent.cover),
+               mean = mean(percent.cover),
+               sd   = sd(percent.cover),
+               se   = sd / sqrt(N)
+)
+Taxa.percent.sum
+```
+
+# colored stacked benthic composition graph taxa
+
+```{r}
+
+Taxa.percent.sum <- dplyr::filter(Taxa.percent.sum, Taxa != "ascidian")
+Taxa.percent.sum <- dplyr::filter(Taxa.percent.sum, Taxa != "CCA")
+Taxa.percent.sum <- dplyr::filter(Taxa.percent.sum, Taxa != "Sand")
+Taxa.percent.sum <- dplyr::filter(Taxa.percent.sum, Taxa != "Rock")
+Taxa.percent.sum <- dplyr::filter(Taxa.percent.sum, Taxa != "Seagrass")
+Taxa.percent.sum <- dplyr::filter(Taxa.percent.sum, Taxa != "Rubble")
+Taxa.percent.sum <- dplyr::filter(Taxa.percent.sum, Taxa != "Macro")
+Taxa.percent.sum <- dplyr::filter(Taxa.percent.sum, Taxa != "D_coral")
+Taxa.percent.sum <- dplyr::filter(Taxa.percent.sum, Taxa != "DeadAlg")
+Taxa.percent.sum <- dplyr::filter(Taxa.percent.sum, Taxa != "Soft")
+
+Taxa.percent.sum
+
+benthicstacked <- ggplot(Taxa.percent.sum, aes(fill=Taxa, y=mean, x=Site)) +  coord_flip() + 
+    geom_bar(position="fill", stat="identity")  + scale_fill_discrete(labels = c("Acr_arb", "Arc_bra", "Arc_tab", "Cypha", "Goniopora", "Isopora","Para_austr", "PocDam", "Porites", "Seriatop", "StPis")) +   theme(strip.text.x = element_text(size = 0, face = "bold", angle = 15, hjust = 0.8)) +   theme(axis.text.y  = element_text(size =15, face = "bold"))  + labs(x = "Site", y = "Benthic composition (%)") +  theme(axis.title = element_text(size = 15)) + # axis title size +
+theme(panel.background = element_blank()) + # re label legend axis
+scale_fill_viridis(discrete = TRUE, option = "B") # COSE OPTIONS BETWEEN a-d FOR DIFF COLOURS
+barplot(1:7, col = magma(7))+
+theme(plot.title = element_text(size = 15)) + # main title 
+theme(axis.text.x = element_text(angle = 0, size = 15)) + theme(legend.text=element_text(size=10)) + theme(axis.text.y = element_text(size = 15), axis.title.x = element_text(size = 15, vjust = -0.8, face = "bold"), axis.title.y = element_text(size = 10, face = "bold", vjust = 1)) + coord_fixed(ratio = 2) + theme(legend.title = element_blank()) 
+
+benthicstacked
+
+
+b <- ggplot(Taxa.percent.sum, aes(x = Taxa,y = mean, fill= Taxa))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("March" = "black", "April/May" = "grey", "October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10)) + labs(title = "Healthy and UN corals by site and time") + ylab("Benthic composition (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+b <- b  + theme(axis.title.x = element_text(angle=0, size=10, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank()) + facet_wrap(~ Site)
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90))
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet Taxa titles
+
+b
+```
+
+
+__Overall hard coral cover at LHI all Acro coral morphology combined__
+# Site and time CoralCoralTaxa all acropora combined
+```{r}
+CoralTaxa.counts <- ddply(PQ, c("Site", "Quadrat"), summarise, ascidian =sum(CoralTaxa == "ascidian"), CCA = sum(CoralTaxa == "CCA"), D_coral = sum(CoralTaxa == "D_coral"), DeadAlg = sum(CoralTaxa == "DeadAlg"), Macro =sum(CoralTaxa == "Macro"), Soft =sum(CoralTaxa == "Soft"), Rock =sum(CoralTaxa == "Rock"), Rubble =sum(CoralTaxa == "Rubble"), Sand =sum(CoralTaxa == "Sand"), Seagrass =sum(CoralTaxa == "Seagrass"),  Acro =sum(CoralTaxa == "Acro"), Cypha =sum(CoralTaxa == "Cypha"), Goniopora =sum(CoralTaxa == "Goniopora"), Isopora =sum(CoralTaxa == "Isopora"), Para_austr =sum(CoralTaxa == "Para_austr"), PocDam =sum(CoralTaxa == "PocDam"), Porites =sum(CoralTaxa == "Porites"), Seriatop =sum(CoralTaxa == "Seriatop"), StPis =sum(CoralTaxa == "StPis"))
+
+CoralTaxa.counts
+CoralTaxa.counts.long <- gather(CoralTaxa.counts, CoralTaxa, count, ascidian:StPis)
+CoralTaxa.counts.long$CoralTaxa <- as.factor(CoralTaxa.counts.long$CoralTaxa)
+
+# use ddply to get %
+
+CoralTaxa.percent <- ddply(PQ, c("Site",  "Quadrat"), summarise, ascidian =sum(CoralTaxa == "ascidian")/length(CoralTaxa)*100, CCA = sum(CoralTaxa == "CCA")/length(CoralTaxa)*100, D_coral = sum(CoralTaxa == "D_coral")/length(CoralTaxa)*100, DeadAlg = sum(CoralTaxa == "DeadAlg")/length(CoralTaxa)*100, Macro =sum(CoralTaxa == "Macro")/length(CoralTaxa)*100, Soft =sum(CoralTaxa == "Soft")/length(CoralTaxa)*100, Rock =sum(CoralTaxa == "Rock")/length(CoralTaxa)*100, Rubble =sum(CoralTaxa == "Rubble")/length(CoralTaxa)*100, Sand =sum(CoralTaxa == "Sand")/length(CoralTaxa)*100, Seagrass =sum(CoralTaxa == "Seagrass")/length(CoralTaxa)*100, Acro =sum(CoralTaxa == "Acro")/length(CoralTaxa)*100, Cypha =sum(CoralTaxa == "Cypha")/length(CoralTaxa)*100, Goniopora =sum(CoralTaxa == "Goniopora")/length(CoralTaxa)*100, Isopora =sum(CoralTaxa == "Isopora")/length(CoralTaxa)*100, Para_austr =sum(CoralTaxa == "Para_austr")/length(CoralTaxa)*100, PocDam =sum(CoralTaxa == "PocDam")/length(CoralTaxa)*100, Porites =sum(CoralTaxa == "Porites")/length(CoralTaxa)*100, Seriatop =sum(CoralTaxa == "Seriatop")/length(CoralTaxa)*100, StPis =sum(CoralTaxa == "StPis")/length(CoralTaxa)*100)
+
+# CoralTaxa percent
+
+CoralTaxa.percent.long <- gather(CoralTaxa.percent, CoralTaxa, percent.cover, ascidian:StPis)
+
+#  Run the functions length, mean, and sd on the value of "zooxprot" for each CoralTaxa,
+#  broken down by site + Time
+CoralTaxa.percent.sum <- ddply(CoralTaxa.percent.long, c( "CoralTaxa"), summarise,
+               N    = length(percent.cover),
+               mean = mean(percent.cover),
+               sd   = sd(percent.cover),
+               se   = sd / sqrt(N)
+)
+CoralTaxa.percent.sum
+```
+
+# colored stacked benthic composition graph CoralTaxa
+
+```{r}
+
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "ascidian")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "CCA")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "Sand")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "Rock")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "Seagrass")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "Rubble")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "Macro")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "D_coral")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "DeadAlg")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "Soft")
+
+CoralTaxa.percent.sum
+
+b <- ggplot(CoralTaxa.percent.sum, aes(x = reorder(CoralTaxa, - mean),y = mean, fill= CoralTaxa))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2)
+b <- b + labs(title = "Coral taxa percent cover in LHI lagoon")
+b <- b + labs(x = "Coral taxa", y = "Percent cover (%)")
+b <- b  + theme(axis.title.x = element_text(angle=0, size=18, face = "bold")) +
+  theme(axis.text.y = element_text(angle = 90, size = 10)) + theme(axis.text.x = element_text(angle=45, size=10, vjust = .99, hjust = 1, face = "italic"))  + theme(axis.title.y = element_text(angle=90, size=18, face = "bold")) 
+b <- b + scale_fill_viridis(discrete = TRUE) +
+  scale_y_continuous(limits = c(0, 30), breaks = seq(0, 30, 5))
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank()) 
+b <- b + scale_x_discrete(labels=c("Acro" = "Acropora", "PocDam" = "Pocillopora damicornis",
+                              "Isopora" = "Isopora cuneata", "Porites" = "Porites", "StPis" = "Stylophora pistilatta", "Cypha" = "Cyphastrea", "Seriatop" = "Seriatopora hystrix", "Goniopora" = "Goniopora", "Para_austr" = "Paragoniastrea australensis"))
+b
+
+ggsave("LHI_Coral_Taxa_Cover.png", device = "png", height = 8, width = 7.2)
+```
+
+__Site and time CoralCoralTaxa all acropora combined__
+```{r}
+CoralTaxa.counts <- ddply(PQ, c("Site", "Quadrat"), summarise, ascidian =sum(CoralTaxa == "ascidian"), CCA = sum(CoralTaxa == "CCA"), D_coral = sum(CoralTaxa == "D_coral"), DeadAlg = sum(CoralTaxa == "DeadAlg"), Macro =sum(CoralTaxa == "Macro"), Soft =sum(CoralTaxa == "Soft"), Rock =sum(CoralTaxa == "Rock"), Rubble =sum(CoralTaxa == "Rubble"), Sand =sum(CoralTaxa == "Sand"), Seagrass =sum(CoralTaxa == "Seagrass"),  Acro =sum(CoralTaxa == "Acro"), Cypha =sum(CoralTaxa == "Cypha"), Goniopora =sum(CoralTaxa == "Goniopora"), Isopora =sum(CoralTaxa == "Isopora"), Para_austr =sum(CoralTaxa == "Para_austr"), PocDam =sum(CoralTaxa == "PocDam"), Porites =sum(CoralTaxa == "Porites"), Seriatop =sum(CoralTaxa == "Seriatop"), StPis =sum(CoralTaxa == "StPis"))
+
+CoralTaxa.counts
+CoralTaxa.counts.long <- gather(CoralTaxa.counts, CoralTaxa, count, ascidian:StPis)
+CoralTaxa.counts.long$CoralTaxa <- as.factor(CoralTaxa.counts.long$CoralTaxa)
+
+# use ddply to get %
+
+CoralTaxa.percent <- ddply(PQ, c("Site",  "Quadrat"), summarise, ascidian =sum(CoralTaxa == "ascidian")/length(CoralTaxa)*100, CCA = sum(CoralTaxa == "CCA")/length(CoralTaxa)*100, D_coral = sum(CoralTaxa == "D_coral")/length(CoralTaxa)*100, DeadAlg = sum(CoralTaxa == "DeadAlg")/length(CoralTaxa)*100, Macro =sum(CoralTaxa == "Macro")/length(CoralTaxa)*100, Soft =sum(CoralTaxa == "Soft")/length(CoralTaxa)*100, Rock =sum(CoralTaxa == "Rock")/length(CoralTaxa)*100, Rubble =sum(CoralTaxa == "Rubble")/length(CoralTaxa)*100, Sand =sum(CoralTaxa == "Sand")/length(CoralTaxa)*100, Seagrass =sum(CoralTaxa == "Seagrass")/length(CoralTaxa)*100, Acro =sum(CoralTaxa == "Acro")/length(CoralTaxa)*100, Cypha =sum(CoralTaxa == "Cypha")/length(CoralTaxa)*100, Goniopora =sum(CoralTaxa == "Goniopora")/length(CoralTaxa)*100, Isopora =sum(CoralTaxa == "Isopora")/length(CoralTaxa)*100, Para_austr =sum(CoralTaxa == "Para_austr")/length(CoralTaxa)*100, PocDam =sum(CoralTaxa == "PocDam")/length(CoralTaxa)*100, Porites =sum(CoralTaxa == "Porites")/length(CoralTaxa)*100, Seriatop =sum(CoralTaxa == "Seriatop")/length(CoralTaxa)*100, StPis =sum(CoralTaxa == "StPis")/length(CoralTaxa)*100)
+
+# CoralTaxa percent
+
+CoralTaxa.percent.long <- gather(CoralTaxa.percent, CoralTaxa, percent.cover, ascidian:StPis)
+
+#  Run the functions length, mean, and sd on the value of "zooxprot" for each CoralTaxa,
+#  broken down by site + Time
+CoralTaxa.percent.sum <- ddply(CoralTaxa.percent.long, c("Site",  "CoralTaxa"), summarise,
+               N    = length(percent.cover),
+               mean = mean(percent.cover),
+               sd   = sd(percent.cover),
+               se   = sd / sqrt(N)
+)
+CoralTaxa.percent.sum
+```
+
+# colored stacked benthic composition graph CoralTaxa
+
+```{r}
+# Filter out all the non-coral ones
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "ascidian")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "CCA")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "Sand")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "Rock")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "Seagrass")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "Rubble")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "Macro")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "D_coral")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "DeadAlg")
+CoralTaxa.percent.sum <- dplyr::filter(CoralTaxa.percent.sum, CoralTaxa != "Soft")
+
+CoralTaxa.percent.sum
+
+benthicstacked <- ggplot(CoralTaxa.percent.sum, aes(fill=CoralTaxa, y=mean, x=Site)) +  coord_flip() + 
+    geom_bar(position="fill", stat="identity")  + scale_fill_discrete(labels = c("Acro",  "Cypha", "Goniopora", "Isopora","Para_austr", "PocDam", "Porites", "Seriatop", "StPis")) +   theme(strip.text.x = element_text(size = 0, face = "bold", angle = 15, hjust = 0.8)) +   theme(axis.text.y  = element_text(size =15, face = "bold"))  + labs(x = "Site", y = "Benthic composition (%)") +  theme(axis.title = element_text(size = 15)) + # axis title size +
+theme(panel.background = element_blank()) + # re label legend axis
+scale_fill_viridis(discrete = TRUE, option = "B") # CHOOSE OPTIONS BETWEEN a-d FOR DIFF COLOURS
+barplot(1:7, col = magma(7))+
+theme(plot.title = element_text(size = 15)) + # main title 
+theme(axis.text.x = element_text(angle = 0, size = 15)) + theme(legend.text=element_text(size=10)) + theme(axis.text.y = element_text(size = 15), axis.title.x = element_text(size = 15, vjust = -0.8, face = "bold"), axis.title.y = element_text(size = 10, face = "bold", vjust = 1)) + coord_fixed(ratio = 2) + theme(legend.title = element_blank()) 
+
+benthicstacked
+
+
+b <- ggplot(CoralTaxa.percent.sum, aes(x = reorder(CoralTaxa, - mean),y = mean, fill= CoralTaxa))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("March" = "black", "April/May" = "grey", "October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10)) + labs(title = "Healthy and UN corals by site and time") + ylab("Benthic composition (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+b <- b  + theme(axis.title.x = element_text(angle=0, size=10, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank()) + facet_wrap(~ Site) +
+  scale_fill_viridis(discrete = TRUE) 
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90))
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet CoralTaxa titles
+
+b
+
+
+
+# Facet wrap coral taxa 
+
+b <- ggplot(CoralTaxa.percent.sum, aes(x = Site,y = mean, fill= Site))
+b <- b + geom_bar(position = position_dodge(), stat = "identity", colour = "black")
+b <- b + geom_errorbar(aes(ymin=mean-se, ymax = mean + se), width = 0.2, position = position_dodge(0.9))
+
+#b <- b + scale_fill_manual("legend", values = c("March" = "black", "April/May" = "grey", "October" = "white"))
+b <- b + theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10)) + labs(title = "Healthy and UN corals by site and time") + ylab("Benthic composition (%)") 
+b <- b + theme_classic()
+#b <- b  + theme(axis.text.x=element_text(angle=90, size=50, vjust=2.5))
+b <- b  + theme(axis.text.y=element_text(angle=90, size=10, vjust=2.5))
+b <- b  + theme(axis.title.x = element_text(angle=0, size=10, vjust=2.5, face = "bold"))
+b <- b  + theme(axis.title.y=element_text(angle=90, size=10, vjust=2.5, face = "bold"))
+# legend text size and remove "legend"
+b <- b  +  theme(legend.text=element_text(size=10)) +  theme(legend.title=element_blank()) + facet_wrap(~ CoralTaxa)
+#b <- b + theme_classic()
+b <- b + theme(axis.text.x = element_text(angle = 90))
+b <- b + theme(strip.text.x = element_text(size = 10, face = "bold")) # text size of facet CoralTaxa titles
+
+b
+
+write.csv(CoralTaxa.percent.sum, 'LHI_Coral_Taxa_Cover.csv')
+```
